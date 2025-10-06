@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-Frame-Options" content="DENY" />
+  <meta name="referrer" content="no-referrer" />
+  <title>ToySPN Builder</title>
+  <link rel="stylesheet" href="style.css" />
+  <meta name="description" content="Build-and-run a tiny SPN block cipher (S-box → linear permutation → add-round-key) with step-by-step visualization and avalanche tests." />
+</head>
+<body>
+  <header class="app-header">
+    <h1>ToySPN Builder - SPN体験ミニツール</h1>
+    <p class="tagline">S-Box・P層・鍵加算で学ぶ現代ブロック暗号の仕組み</p>
+    <nav class="tabs">
+      <button class="tab active" data-tab="designer">設計</button>
+      <button class="tab" data-tab="crypto">暗号化/復号</button>
+      <button class="tab" data-tab="analysis">解析</button>
+      <button class="tab" data-tab="learn">学習</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Designer -->
+    <section id="designer" class="panel active">
+      <div class="card">
+        <h2>S-Box（4bit，全単射）<span class="help-icon">?<span class="tooltip">4ビット入力を別の4ビット値に置換する非線形変換表です。<br>0x0〜0xFの16個の値を重複なく並べてください。<br>線形暗号の弱点を補う重要な要素です。</span></span></h2>
+        <p class="help">0x0〜0xF の置換を入力（重複不可）。変更すると逆S-Boxは自動生成されます。<br>
+        <span style="font-size:13px; color:var(--accent); font-weight:600;">💡 全単射 = すべての入力が異なる出力に1対1対応（重複なし・欠落なし）</span></p>
+        <div id="sbox-grid" class="grid16"></div>
+        <div class="row">
+          <button id="sbox-reset" class="btn">デフォルトに戻す</button>
+          <button id="sbox-random" class="btn">ランダム生成</button>
+          <button id="sbox-identity" class="btn btn-warning">S-Boxなし（脆弱）</button>
+          <span id="sbox-status" class="status"></span>
+        </div>
+
+        <div class="visualization-section">
+          <h3>対応関係の可視化</h3>
+          <svg id="sbox-viz" class="sbox-visualization" viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
+            <!-- Input dots -->
+            <g id="input-dots"></g>
+            <!-- Output dots -->
+            <g id="output-dots"></g>
+            <!-- Arrows -->
+            <g id="arrows"></g>
+            <!-- Labels -->
+            <text x="10" y="30" class="viz-label">入力</text>
+            <text x="10" y="175" class="viz-label">出力</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>P層（ビット置換，16bit）<span class="help-icon">?<span class="tooltip">16ビットのビット位置を入れ替える線形変換層です。<br>各ビットiをP[i]番目の位置に移動させます。<br>S-Boxで生じた変化をブロック全体に拡散させる役割があります。</span></span></h2>
+        <p class="help">ビット i（0..15）を P[i] 番目へ。全単射である必要があります。</p>
+        <div id="player-grid" class="grid16"></div>
+        <div class="row">
+          <button id="player-reset" class="btn">デフォルトに戻す</button>
+          <button id="player-random" class="btn">ランダム生成</button>
+          <button id="player-identity" class="btn btn-warning">P層なし（脆弱）</button>
+          <span id="player-status" class="status"></span>
+        </div>
+
+        <div class="visualization-section">
+          <h3>対応関係の可視化</h3>
+          <svg id="player-viz" class="sbox-visualization" viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
+            <!-- Input dots -->
+            <g id="player-input-dots"></g>
+            <!-- Output dots -->
+            <g id="player-output-dots"></g>
+            <!-- Arrows -->
+            <g id="player-arrows"></g>
+            <!-- Labels -->
+            <text x="10" y="30" class="viz-label">入力</text>
+            <text x="10" y="175" class="viz-label">出力</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>ラウンド設定</h2>
+        <div class="config-group-inline">
+          <label>ラウンド数</label>
+          <span class="help-icon">?<span class="tooltip">暗号化を繰り返す回数です。<br>ラウンド数が多いほど安全性が高まりますが、処理時間も増えます。<br>一般的なブロック暗号は10〜14ラウンド程度です。</span></span>
+          <input id="rounds" type="number" min="1" max="16" value="8" placeholder="8" class="input-short" />
+          <button id="rounds-min" class="btn btn-warning btn-compact">最小1（脆弱）</button>
+          <button id="rounds-max" class="btn btn-compact">最大16</button>
+        </div>
+        <div class="config-group-inline">
+          <label>マスター鍵 (16進数 16-bit)</label>
+          <span class="help-icon">?<span class="tooltip">暗号化・復号に使う秘密鍵です。<br>16進数4桁（16ビット）で指定します。<br>この鍵から各ラウンドで使う鍵を自動生成します。</span></span>
+          <input id="master-key" type="text" value="C0DE" maxlength="4" placeholder="例: C0DE" class="input-medium" />
+          <button id="key-random" class="btn">ランダム生成</button>
+        </div>
+      </div>
+
+      <div class="validate-section">
+        <button id="validate" class="btn primary validate-btn">🔍 設定を検証</button>
+      </div>
+
+      <div id="validate-result" class="validate-result card" style="display:none;">
+        <h4>検証結果</h4>
+        <div id="validate-status" class="validate-details"></div>
+      </div>
+    </section>
+
+    <!-- Crypto -->
+    <section id="crypto" class="panel">
+      <div class="card">
+        <h2>暗号化 / 復号</h2>
+        <div class="row">
+          <label>平文 (16進数 16-bit)
+            <input id="pt" type="text" value="1234" maxlength="4" placeholder="例: 1234" />
+          </label>
+          <label>暗号文 (16進数 16-bit)
+            <input id="ct" type="text" value="" maxlength="4" placeholder="例: A5F3" />
+          </label>
+        </div>
+        <div class="row">
+          <button id="btn-encrypt" class="btn primary">暗号化</button>
+          <button id="btn-decrypt" class="btn">復号</button>
+          <button id="btn-sample" class="btn">サンプル</button>
+          <span id="crypto-status" class="status"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>ステップ詳細</h3>
+        <div id="steps" class="steps"></div>
+      </div>
+    </section>
+
+    <!-- Analysis -->
+    <section id="analysis" class="panel">
+      <div class="card">
+        <h2>なだれ効果テスト（Avalanche Effect）<span class="help-icon">?<span class="tooltip">入力の1ビットを変えたとき、出力が平均して何ビット変化するかを測定します。<br>理想的には約50%（8ビット）が変化するべきで、これが暗号の拡散性能を示します。<br>※アバランシェ効果とも呼ばれます。</span></span></h2>
+        <div class="row">
+          <label>試行回数
+            <input id="trials" type="number" min="10" max="2000" value="200" placeholder="200" />
+          </label>
+          <button id="btn-avalanche" class="btn primary">実行</button>
+          <span id="avalanche-status" class="status"></span>
+        </div>
+        <div class="row">
+          <canvas id="chart" width="680" height="260" aria-label="Histogram"></canvas>
+        </div>
+        <div class="row">
+          <pre id="avalanche-summary" class="mono"></pre>
+        </div>
+        <div id="histogram-table" class="histogram-data" style="display:none;">
+          <table>
+            <thead>
+              <tr>
+                <th>反転ビット数</th>
+                <th>回数</th>
+                <th>割合</th>
+              </tr>
+            </thead>
+            <tbody id="histogram-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="expert-hint" class="card expert-hint" style="display:none;">
+        <h3>💡 専門家からのヒント</h3>
+        <div id="hint-content" class="hint-content"></div>
+      </div>
+    </section>
+
+    <!-- Learn -->
+    <section id="learn" class="panel">
+      <div class="card">
+        <h2>学習コンテンツ</h2>
+
+        <div class="accordion-item">
+          <button class="accordion-header">
+            <span>SPNとは？</span>
+            <span class="accordion-icon">▼</span>
+          </button>
+          <div class="accordion-content">
+            <p><b>SPN（Substitution-Permutation Network）</b>は、現代ブロック暗号の基本構造の一つです。</p>
+            <ul>
+              <li><b>Substitution（置換）</b>: S-Boxによる非線形変換で、線形解読を困難にする</li>
+              <li><b>Permutation（転置）</b>: P層によるビット拡散で、局所的な変化を全体に広げる</li>
+              <li><b>鍵加算</b>: ラウンド鍵とのXORで秘密性を付与</li>
+            </ul>
+            <p>これらを複数ラウンド繰り返すことで、強固な暗号化を実現します。AESもSPN構造を採用しています。</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header">
+            <span>S-Box（置換層）の役割</span>
+            <span class="accordion-icon">▼</span>
+          </button>
+          <div class="accordion-content">
+            <p>S-Box（Substitution Box）は、入力を非線形的に変換する lookup テーブルです。</p>
+            <h4>なぜ非線形性が必要？</h4>
+            <p>古典的な<b>ヒル暗号</b>などの線形暗号は、行列演算のみで構成されるため、既知平文攻撃に弱いという致命的な欠陥があります。S-Boxは非線形変換を導入することでこの問題を解決します。</p>
+            <h4>良いS-Boxの条件</h4>
+            <ul>
+              <li><b>全単射（bijection）</b>: すべての入力が異なる出力に対応（復号可能性）</li>
+              <li><b>差分耐性</b>: 入力差から出力差を予測しにくい</li>
+              <li><b>線形耐性</b>: 入出力間の線形関係が少ない</li>
+              <li><b>SAC特性</b>: 入力1ビット変化で出力の約半分が変化</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header">
+            <span>P層（拡散層）の役割</span>
+            <span class="accordion-icon">▼</span>
+          </button>
+          <div class="accordion-content">
+            <p>P層（Permutation Layer）は、ビット位置を入れ替える線形変換です。</p>
+            <h4>拡散（Diffusion）とは？</h4>
+            <p>平文の1ビットの変化が、暗号文全体に影響を及ぼす性質を<b>拡散</b>と呼びます。S-Boxだけでは局所的な変換に留まるため、P層でビットをシャッフルして影響範囲を広げます。</p>
+            <h4>設計のポイント</h4>
+            <ul>
+              <li><b>全単射性</b>: すべてのビット位置が一意に対応（可逆性）</li>
+              <li><b>遠距離混合</b>: 近いビット同士だけでなく、遠くのビットも混ぜる</li>
+              <li><b>高速性</b>: ハードウェア実装で配線のみで実現可能</li>
+            </ul>
+            <p>本ツールのデフォルトP層は、ニブル単位で列方向に並び替える設計です。</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header">
+            <span>鍵スケジュール（鍵導出）</span>
+            <span class="accordion-icon">▼</span>
+          </button>
+          <div class="accordion-content">
+            <p>マスター鍵から各ラウンドで使う<b>ラウンド鍵</b>を生成する仕組みが鍵スケジュールです。</p>
+            <h4>本ツールの簡易実装</h4>
+            <pre class="code-block">k = rotate_left(k, (round % 5) + 1) ⊕ RC[round]</pre>
+            <ul>
+              <li><b>回転</b>: ビットを左シフトして拡散</li>
+              <li><b>ラウンド定数（RC）</b>: 各ラウンドで異なる定数とXOR</li>
+            </ul>
+            <h4>実用暗号では</h4>
+            <p>AESなどでは、S-Box適用やより複雑な変換を含む強固な鍵スケジュールが使われます。関連鍵攻撃への耐性が重要です。</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header">
+            <span>なだれ効果（Avalanche Effect / アバランシェ効果）</span>
+            <span class="accordion-icon">▼</span>
+          </button>
+          <div class="accordion-content">
+            <p><b>なだれ効果（アバランシェ効果）</b>は、入力の小さな変化（1ビット）が出力の大きな変化（約50%のビット）を引き起こす性質です。</p>
+            <h4>測定方法</h4>
+            <ol>
+              <li>ランダムな平文を暗号化 → 暗号文C1</li>
+              <li>平文の1ビットだけ反転させて暗号化 → 暗号文C2</li>
+              <li>C1 ⊕ C2 のハミング距離を計測</li>
+              <li>多数回試行して平均を取る</li>
+            </ol>
+            <h4>理想値</h4>
+            <p>16ビットブロックの場合、平均<b>8ビット（50%）</b>が反転するのが理想です。これより少ないと拡散が不十分、多すぎても偏りがあります。</p>
+            <p>本ツールでヒストグラムを確認し、分布が中央（8付近）に集中しているか観察してください。</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header">
+            <span>ブロック暗号の歴史</span>
+            <span class="accordion-icon">▼</span>
+          </button>
+          <div class="accordion-content">
+            <h4>古典暗号の時代</h4>
+            <ul>
+              <li><b>シーザー暗号</b>: 単純な文字シフト（線形）</li>
+              <li><b>ヴィジュネル暗号</b>: 多表式置換だが周期性あり</li>
+              <li><b>ヒル暗号</b>: 行列演算（線形代数攻撃に脆弱）</li>
+            </ul>
+            <h4>現代ブロック暗号</h4>
+            <ul>
+              <li><b>DES（1977）</b>: Feistel構造、56ビット鍵（現在は脆弱）</li>
+              <li><b>AES（2001）</b>: SPN構造、128/192/256ビット鍵（現在の標準）</li>
+              <li><b>その他</b>: Blowfish, Twofish, Serpentなど</li>
+            </ul>
+            <p>SPNとFeistel構造が現代ブロック暗号の二大潮流です。</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header">
+            <span>このツールの限界と実用暗号との違い</span>
+            <span class="accordion-icon">▼</span>
+          </button>
+          <div class="accordion-content">
+            <p class="note"><b>⚠️ 注意: このツールは教育用であり、実運用には使用できません。</b></p>
+            <h4>主な制限</h4>
+            <table class="comparison-table">
+              <tr>
+                <th>項目</th>
+                <th>ToySPN Builder</th>
+                <th>AES（実用暗号）</th>
+              </tr>
+              <tr>
+                <td>ブロックサイズ</td>
+                <td>16ビット</td>
+                <td>128ビット</td>
+              </tr>
+              <tr>
+                <td>鍵長</td>
+                <td>16ビット</td>
+                <td>128/192/256ビット</td>
+              </tr>
+              <tr>
+                <td>ラウンド数</td>
+                <td>8（デフォルト）</td>
+                <td>10/12/14ラウンド</td>
+              </tr>
+              <tr>
+                <td>S-Box設計</td>
+                <td>任意編集可能</td>
+                <td>数学的に最適化済み</td>
+              </tr>
+              <tr>
+                <td>鍵スケジュール</td>
+                <td>単純な回転+XOR</td>
+                <td>S-Box適用含む複雑な変換</td>
+              </tr>
+            </table>
+            <h4>学習目的での使い方</h4>
+            <ul>
+              <li>S-Boxの全単射性を崩すと復号できなくなることを確認</li>
+              <li>P層の設計を変えてなだれ効果がどう変化するか観察</li>
+              <li>ラウンド数を減らすと拡散が不十分になることを体験</li>
+            </ul>
+          </div>
+        </div>
+
+        <p class="note" style="margin-top:16px;">💡 各項目をクリックして詳細を展開してください。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer">
+      🔗 GitHubリポジトリはこちら（ <a href="https://github.com/ipusiron/toyspn-builder" target="_blank">ipusiron/toyspn-builder</a> ）
+    </div>
+  </footer>
+
+  <script src="js/core.js"></script>
+  <script src="js/analysis.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>

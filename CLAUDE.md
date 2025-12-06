@@ -27,20 +27,20 @@ The app is deployed via GitHub Pages. Simply push changes to the main branch - n
 
 ### Core Components
 
-**Three-module architecture:**
+**Three-module architecture (IIFE pattern, no global pollution):**
 
-1. **js/core.js** - Core cipher primitives
+1. **js/core.js** - Core cipher primitives → exports `window.ToySPN`
    - 16-bit block operations: S-box substitution (4-bit nibbles), bit permutation (P-layer), XOR key addition
    - Bijection validation for S-boxes and permutation layers
    - Key schedule: rotate + XOR with round constants
    - `encryptBlock()` / `decryptBlock()` - main cipher functions with optional step-by-step trace
 
-2. **js/analysis.js** - Cryptanalysis tools
+2. **js/analysis.js** - Cryptanalysis tools → exports `window.ToySPNAnalysis`
    - Avalanche test implementation: measures output bit changes from 1-bit input differences
    - Histogram rendering for distribution visualization
    - Uses `crypto.getRandomValues()` for randomness (fallback to Math.random)
 
-3. **js/ui.js** - DOM manipulation & event handling
+3. **js/ui.js** - DOM manipulation & event handling (no exports, self-contained IIFE)
    - Tab navigation between Designer/Crypto/Analysis/Learn panels
    - Grid editors for S-box (16 hex values) and P-layer (16 bit positions) with real-time bijection validation
    - Encrypt/Decrypt UI with step-by-step trace display
@@ -86,6 +86,13 @@ Changes to S or P immediately update validation status. Encryption/decryption re
 - Master key example: `C0DE`
 
 **Avalanche ideal:** ~8 bits flipped on average (50% of 16 bits) for good diffusion
+
+## Security Implementation
+
+This project emphasizes XSS prevention as an educational example:
+- **No innerHTML** - all dynamic content uses `textContent` and `createElement`
+- **CSP headers** - `script-src 'self'` blocks inline scripts
+- **Input validation** - `clampHex16()` uses whitelist filtering (`/[^0-9a-fA-F]/g`)
 
 ## Educational Context
 

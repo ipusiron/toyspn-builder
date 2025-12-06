@@ -1,11 +1,39 @@
 <!--
 ---
-title: ToySPN Builder
-category: modern-crypto-edu
-difficulty: 3
-description: Build-and-run a tiny SPN block cipher (S-box → linear permutation → add-round-key) with step-by-step visualization and avalanche tests.
-tags: [block-cipher, SPN, S-box, permutation, education, javascript]
-demo: https://ipusiron.github.io/toyspn-builder/
+id: day094
+slug: toyspn-builder
+
+title: "ToySPN Builder"
+
+subtitle_ja: "SPN体験ミニツール"
+subtitle_en: "Interactive SPN Block Cipher Learning Tool"
+
+description_ja: "S-Box・P層・鍵加算からなるSPN（Substitution-Permutation Network）構造を自分で設計・実行し、暗号化ステップの可視化やアバランシェ効果テストで現代ブロック暗号の基礎を体感できる教育用Webツール"
+description_en: "An educational web tool to design and run a minimal SPN (Substitution-Permutation Network) block cipher with step-by-step encryption visualization and avalanche effect testing"
+
+category_ja:
+  - 現代暗号
+  - ブロック暗号
+category_en:
+  - Modern Cryptography
+  - Block Cipher
+
+difficulty: 4
+
+tags:
+  - SPN
+  - block-cipher
+  - S-box
+  - permutation
+  - avalanche-effect
+  - cryptography
+  - education
+  - javascript
+
+repo_url: "https://github.com/ipusiron/toyspn-builder"
+demo_url: "https://ipusiron.github.io/toyspn-builder/"
+
+hub: true
 ---
 -->
 

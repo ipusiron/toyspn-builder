@@ -15,6 +15,7 @@
   <header class="app-header">
     <h1>ToySPN Builder - SPN体験ミニツール</h1>
     <p class="tagline">S-Box・P層・鍵加算で学ぶ現代ブロック暗号の仕組み</p>
+    <p class="note">16ビットの教育用暗号です。なだれ効果は安全性の評価ではありません。秘密情報の保護には使えません。</p>
     <nav class="tabs">
       <button class="tab active" data-tab="designer">設計</button>
       <button class="tab" data-tab="crypto">暗号化/復号</button>
@@ -27,14 +28,14 @@
     <!-- Designer -->
     <section id="designer" class="panel active">
       <div class="card">
-        <h2>S-Box（4bit，全単射）<span class="help-icon">?<span class="tooltip">4ビット入力を別の4ビット値に置換する非線形変換表です。<br>0x0〜0xFの16個の値を重複なく並べてください。<br>線形暗号の弱点を補う重要な要素です。</span></span></h2>
+        <h2>S-Box（4bit，全単射）<span class="help-icon">?<span class="tooltip">4ビット入力を4ビットの値に置換する表です。<br>0〜Fを重複なく並べてください。全単射でも非線形とは限りません。</span></span></h2>
         <p class="help">0x0〜0xF の置換を入力（重複不可）。変更すると逆S-Boxは自動生成されます。<br>
         <span style="font-size:13px; color:var(--accent); font-weight:600;">💡 全単射 = すべての入力が異なる出力に1対1対応（重複なし・欠落なし）</span></p>
         <div id="sbox-grid" class="grid16"></div>
         <div class="row">
           <button id="sbox-reset" class="btn">デフォルトに戻す</button>
           <button id="sbox-random" class="btn">ランダム生成</button>
-          <button id="sbox-identity" class="btn btn-warning">S-Boxなし（脆弱）</button>
+          <button id="sbox-identity" class="btn btn-warning">恒等S-Box（値を変えない）</button>
           <span id="sbox-status" class="status"></span>
         </div>
 
@@ -61,7 +62,7 @@
         <div class="row">
           <button id="player-reset" class="btn">デフォルトに戻す</button>
           <button id="player-random" class="btn">ランダム生成</button>
-          <button id="player-identity" class="btn btn-warning">P層なし（脆弱）</button>
+          <button id="player-identity" class="btn btn-warning">恒等P層（位置を変えない）</button>
           <span id="player-status" class="status"></span>
         </div>
 
@@ -85,9 +86,9 @@
         <h2>ラウンド設定</h2>
         <div class="config-group-inline">
           <label>ラウンド数</label>
-          <span class="help-icon">?<span class="tooltip">暗号化を繰り返す回数です。<br>ラウンド数が多いほど安全性が高まりますが、処理時間も増えます。<br>一般的なブロック暗号は10〜14ラウンド程度です。</span></span>
+          <span class="help-icon">?<span class="tooltip">S-Box、P層、鍵XORを繰り返す回数です。<br>1〜16で指定します。回数を増やしても拡散や安全性の改善は保証されません。</span></span>
           <input id="rounds" type="number" min="1" max="16" value="8" placeholder="8" class="input-short" />
-          <button id="rounds-min" class="btn btn-warning btn-compact">最小1（脆弱）</button>
+          <button id="rounds-min" class="btn btn-warning btn-compact">最小1</button>
           <button id="rounds-max" class="btn btn-compact">最大16</button>
         </div>
         <div class="config-group-inline">
@@ -166,7 +167,7 @@
       </div>
 
       <div id="expert-hint" class="card expert-hint" style="display:none;">
-        <h3>💡 専門家からのヒント</h3>
+        <h3>💡 結果の読み方</h3>
         <div id="hint-content" class="hint-content"></div>
       </div>
     </section>
@@ -188,7 +189,7 @@
               <li><b>Permutation（転置）</b>: P層によるビット拡散で、局所的な変化を全体に広げる</li>
               <li><b>鍵加算</b>: ラウンド鍵とのXORで秘密性を付与</li>
             </ul>
-            <p>これらを複数ラウンド繰り返すことで、強固な暗号化を実現します。AESもSPN構造を採用しています。</p>
+            <p>これらを繰り返し、変化がどう伝わるかを観察します。AESもSPN型ですが、本ツールとは構成や安全性が異なります。</p>
           </div>
         </div>
 
@@ -198,15 +199,15 @@
             <span class="accordion-icon">▼</span>
           </button>
           <div class="accordion-content">
-            <p>S-Box（Substitution Box）は、入力を非線形的に変換する lookup テーブルです。</p>
+            <p>S-Box（Substitution Box）は、入力を別の値に置換する表です。非線形なものを使う目的がありますが、任意の全単射が非線形とは限りません。恒等S-Boxは線形です。</p>
             <h4>なぜ非線形性が必要？</h4>
-            <p>古典的な<b>ヒル暗号</b>などの線形暗号は、行列演算のみで構成されるため、既知平文攻撃に弱いという致命的な欠陥があります。S-Boxは非線形変換を導入することでこの問題を解決します。</p>
+            <p>ヒル暗号は、十分な独立した平文と暗号文の組があると行列を求められます。非線形なS-Boxは、このような線形関係だけでは表せない変換を導入します。ただし、S-Boxの追加だけで安全になるわけではありません。</p>
             <h4>良いS-Boxの条件</h4>
             <ul>
               <li><b>全単射（bijection）</b>: すべての入力が異なる出力に対応（復号可能性）</li>
               <li><b>差分耐性</b>: 入力差から出力差を予測しにくい</li>
               <li><b>線形耐性</b>: 入出力間の線形関係が少ない</li>
-              <li><b>SAC特性</b>: 入力1ビット変化で出力の約半分が変化</li>
+              <li><b>SAC特性</b>: 各入力ビットを反転したとき、各出力ビットが半分の入力で反転する性質。本ツールの平均値だけでは判定できない</li>
             </ul>
           </div>
         </div>
@@ -240,9 +241,10 @@
             <h4>本ツールの簡易実装</h4>
             <pre class="code-block">k = rotate_left(k, (round % 5) + 1) ⊕ RC[round]</pre>
             <ul>
-              <li><b>回転</b>: ビットを左シフトして拡散</li>
-              <li><b>ラウンド定数（RC）</b>: 各ラウンドで異なる定数とXOR</li>
+              <li><b>回転</b>: ビットを左へ循環移動する（端から出たビットは反対側に戻る）</li>
+              <li><b>ラウンド定数（RC）</b>: 固定の定数列とXORする。定数列には重複がある</li>
             </ul>
+            <p>回転と定数XORによる鍵導出はGF(2)上のアフィン変換です。ラウンド鍵の独立性は保証しません。</p>
             <h4>実用暗号では</h4>
             <p>AESなどでは、S-Box適用やより複雑な変換を含む強固な鍵スケジュールが使われます。関連鍵攻撃への耐性が重要です。</p>
           </div>
@@ -263,7 +265,7 @@
               <li>多数回試行して平均を取る</li>
             </ol>
             <h4>理想値</h4>
-            <p>16ビットブロックの場合、平均<b>8ビット（50%）</b>が反転するのが理想です。これより少ないと拡散が不十分、多すぎても偏りがあります。</p>
+            <p>各出力ビットが確率1/2で反転するモデルでは、平均は8ビットです。ただし、平均が8に近いだけで各ビットの反転確率や独立性はわかりません。安全性やSACの合格基準には使えません。</p>
             <p>本ツールでヒストグラムを確認し、分布が中央（8付近）に集中しているか観察してください。</p>
           </div>
         </div>
@@ -276,7 +278,7 @@
           <div class="accordion-content">
             <h4>古典暗号の時代</h4>
             <ul>
-              <li><b>シーザー暗号</b>: 単純な文字シフト（線形）</li>
+              <li><b>シーザー暗号</b>: 単純な文字シフト</li>
               <li><b>ヴィジュネル暗号</b>: 多表式置換だが周期性あり</li>
               <li><b>ヒル暗号</b>: 行列演算（線形代数攻撃に脆弱）</li>
             </ul>
@@ -322,7 +324,7 @@
               <tr>
                 <td>S-Box設計</td>
                 <td>任意編集可能</td>
-                <td>数学的に最適化済み</td>
+                <td>固定の8ビットS-Box</td>
               </tr>
               <tr>
                 <td>鍵スケジュール</td>
@@ -332,9 +334,9 @@
             </table>
             <h4>学習目的での使い方</h4>
             <ul>
-              <li>S-Boxの全単射性を崩すと復号できなくなることを確認</li>
+              <li>S-Boxの全単射性を崩すと入力検証で拒否されることを確認</li>
               <li>P層の設計を変えてなだれ効果がどう変化するか観察</li>
-              <li>ラウンド数を減らすと拡散が不十分になることを体験</li>
+              <li>ラウンド数による反転ビット数の変化を観察</li>
             </ul>
           </div>
         </div>

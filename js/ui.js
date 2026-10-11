@@ -636,53 +636,16 @@
   trialsEl.addEventListener('input', () => invalidate('analysis'));
 
   const analyzeAvalancheResult = (avg, hist, trials) => {
-    const deviation = Math.abs(avg - 8.0);
-    let verdict, verdictClass, analysis, suggestions;
-
-    // Calculate distribution metrics
+    // These describe this sample only; they are not cryptographic grades.
     const centerCount = hist[7] + hist[8] + hist[9];
     const centerPct = (centerCount / trials) * 100;
-
-    if (deviation < 0.5 && centerPct > 50) {
-      verdict = '優秀';
-      verdictClass = 'excellent';
-      analysis = 'なだれ効果が理想的です。入力1ビットの変化が出力の約半分に影響を及ぼしており、良好な拡散性を示しています。';
-      suggestions = [
-        '現在のS-BoxとP層の組み合わせは暗号学的に良好です',
-        'この設定を保存して、他の設定と比較してみましょう',
-        'さらにラウンド数を増やすと、より安定した拡散が得られます'
-      ];
-    } else if (deviation < 1.0 && centerPct > 40) {
-      verdict = '良好';
-      verdictClass = 'good';
-      analysis = 'なだれ効果は許容範囲内です。実用暗号には不十分ですが、教育目的としては十分な拡散性を示しています。';
-      suggestions = [
-        'ラウンド数を増やすと、より理想値に近づきます',
-        'P層の設計を見直し、より遠距離のビット混合を試してみましょう',
-        'S-Boxをランダム生成して、異なる結果を観察してみましょう'
-      ];
-    } else if (deviation < 2.0) {
-      verdict = '要改善';
-      verdictClass = 'fair';
-      analysis = 'なだれ効果が不十分です。拡散性に偏りがあり、暗号学的強度が低い可能性があります。';
-      suggestions = [
-        'ラウンド数が少なすぎる可能性があります（推奨: 8ラウンド以上）',
-        'P層が恒等置換に近い場合、ビットが十分に混ざりません',
-        'S-Boxの設計を見直し、より非線形性の高いものを試しましょう'
-      ];
-    } else {
-      verdict = '不合格';
-      verdictClass = 'poor';
-      analysis = 'なだれ効果が著しく不足しています。このままでは暗号として機能しません。設定を根本的に見直す必要があります。';
-      suggestions = [
-        'S-BoxまたはP層が全単射でない可能性があります（検証ボタンで確認）',
-        'ラウンド数が1〜2の場合、拡散が全く不十分です',
-        'デフォルト設定に戻して、基本的な動作を確認しましょう',
-        'P層が恒等置換（i→i）になっていないか確認してください'
-      ];
-    }
-
-    return { verdict, verdictClass, analysis, suggestions };
+    return {
+      verdict: ToySPNMessages.ja.measured,
+      verdictClass: 'measured',
+      analysis: `7〜9ビットが反転した試行は${centerCount}/${trials}回（${centerPct.toFixed(1)}%）です。` +
+        ToySPNMessages.ja.measurementLimit,
+      suggestions: ToySPNMessages.ja.measurementHints
+    };
   };
 
   avBtn.addEventListener('click', ()=>{
@@ -737,7 +700,7 @@
         const section1 = document.createElement('div');
         section1.className = 'hint-section';
         const h4_1 = document.createElement('h4');
-        h4_1.textContent = '総合評価';
+        h4_1.textContent = '測定値';
         const p1 = document.createElement('p');
         const span1 = document.createElement('span');
         span1.className = `hint-verdict ${verdictClass}`;
@@ -750,7 +713,7 @@
         const section2 = document.createElement('div');
         section2.className = 'hint-section';
         const h4_2 = document.createElement('h4');
-        h4_2.textContent = '分析';
+        h4_2.textContent = '分布と測定の限界';
         const p2 = document.createElement('p');
         p2.textContent = analysis;
         section2.appendChild(h4_2);
@@ -759,7 +722,7 @@
         const section3 = document.createElement('div');
         section3.className = 'hint-section';
         const h4_3 = document.createElement('h4');
-        h4_3.textContent = '改善のための提案';
+        h4_3.textContent = '比較するときの注意';
         const ul = document.createElement('ul');
         suggestions.forEach(s => {
           const li = document.createElement('li');

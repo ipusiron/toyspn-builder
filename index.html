@@ -151,6 +151,10 @@
       <div class="card">
         <h3>ステップ詳細</h3>
         <p id="steps-empty" class="empty-state" role="status">暗号化または復号を実行すると、各ラウンドの計算過程を表示します。</p>
+        <div id="step-controls" class="step-controls" hidden>
+          <button id="steps-expand" class="btn" type="button" aria-controls="steps">すべて開く</button>
+          <button id="steps-collapse" class="btn" type="button" aria-controls="steps">すべて閉じる</button>
+        </div>
         <div id="steps" class="steps"></div>
       </div>
     </section>

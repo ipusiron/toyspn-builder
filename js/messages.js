@@ -511,6 +511,9 @@
       "❌ Invalid settings",
     "ラウンド {0}":
       "Round {0}",
+    "すべて開く": "Expand all",
+    "すべて閉じる": "Collapse all",
+    "入力 {0} → 出力 {1}": "Input {0} → Output {1}",
     "ラウンド {0} (逆順)":
       "Round {0} (reverse order)",
     "S-Box後":

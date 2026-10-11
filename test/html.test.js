@@ -42,3 +42,11 @@ test('text palette has at least 4.5:1 contrast on its backgrounds',()=>{
     }
   }
 });
+
+test('language control is separate from centered header content and tabs',()=>{
+  assert.match(html,/<div class="header-actions">\s*<button id="language-toggle"/);
+  assert.match(html,/<div class="header-intro">/);
+  assert.match(css,/\.header-actions\{[^}]*justify-self:end/);
+  assert.match(css,/grid-template-areas:"\. intro actions" "tabs tabs tabs"/);
+  assert.match(css,/\.header-inner\{[^}]*gap:1rem/);
+});

@@ -15,16 +15,22 @@
 <body>
   <noscript>このツールの実行にはJavaScriptが必要です。</noscript>
   <header class="app-header">
+    <div class="header-inner">
+    <div class="header-actions">
+      <button id="language-toggle" class="btn" type="button" lang="en">English</button>
+    </div>
+    <div class="header-intro">
     <h1>ToySPN Builder - SPN体験ミニツール</h1>
     <p class="tagline">S-Box・P層・鍵加算で学ぶ現代ブロック暗号の仕組み</p>
     <p class="note">16ビットの教育用暗号です。なだれ効果は安全性の評価ではありません。秘密情報の保護には使えません。</p>
-    <button id="language-toggle" class="btn" type="button" lang="en">English</button>
+    </div>
     <nav class="tabs">
       <button class="tab active" data-tab="designer">設計</button>
       <button class="tab" data-tab="crypto">暗号化/復号</button>
       <button class="tab" data-tab="analysis">解析</button>
       <button class="tab" data-tab="learn">学習</button>
     </nav>
+    </div>
   </header>
 
   <main>

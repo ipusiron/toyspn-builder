@@ -44,8 +44,9 @@
     const arr = [];
     $$('#sbox-grid .grid16-item input').forEach(inp=>{
       const v = inp.value.trim();
-      const n = parseInt(v || '0', 16);
-      arr.push((Number.isFinite(n) ? n : 0) & 0xF);
+      const valid = /^[0-9a-fA-F]$/.test(v);
+      inp.setAttribute('aria-invalid', String(!valid));
+      arr.push(valid ? parseInt(v, 16) : NaN);
     });
     return arr;
   };
@@ -59,6 +60,8 @@
     inputDots.innerHTML = '';
     outputDots.innerHTML = '';
     arrows.innerHTML = '';
+
+    if (!ToySPN.isBijection(S, 16)) return;
 
     // Add arrowhead marker
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -195,8 +198,9 @@
   const readPLayer = () => {
     const arr = [];
     $$('#player-grid .grid16-item input').forEach(inp=>{
-      const n = parseInt((inp.value || '0'), 10);
-      arr.push((Number.isFinite(n) ? n : 0) & 0xF);
+      const valid = /^\d{1,2}$/.test(inp.value) && Number(inp.value) <= 15;
+      inp.setAttribute('aria-invalid', String(!valid));
+      arr.push(valid ? Number(inp.value) : NaN);
     });
     return arr;
   };
@@ -210,6 +214,8 @@
     inputDots.innerHTML = '';
     outputDots.innerHTML = '';
     arrows.innerHTML = '';
+
+    if (!ToySPN.isBijection(P, 16)) return;
 
     // Add arrowhead marker
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -349,16 +355,20 @@
   });
 
   keyRandomBtn.addEventListener('click', ()=>{
-    // Generate random 16-bit key
-    const randomKey = Math.floor(Math.random() * 0x10000);
-    mkeyEl.value = ToySPN.numToHex16(randomKey);
+    try {
+      mkeyEl.value = ToySPN.numToHex16(ToySPN.random16());
+    } catch (e) {
+      validateResult.style.display = 'block';
+      validateStatus.textContent = ToySPNMessages.error(e);
+    }
   });
 
   validateBtn.addEventListener('click', ()=>{
+    try {
     const okS = ToySPN.isBijection(S,16);
     const okP = ToySPN.isBijection(P,16);
     const mk = ToySPN.hex16ToNum(mkeyEl.value);
-    const R = Math.max(1, Math.min(16, parseInt(roundsEl.value||'8',10)));
+    const R = readInteger(roundsEl, 1, 16, 'invalidRounds');
     const keys = ToySPN.deriveRoundKeys(mk, R);
 
     // Build detailed result
@@ -400,17 +410,26 @@
     validateStatus.appendChild(createDetailRow('総合判定', overall ? '✅ 暗号化可能' : '❌ 設定エラー', overall ? 'ok' : 'ng', true));
 
     validateResult.style.display = 'block';
+    } catch (e) {
+      validateResult.style.display = 'block';
+      validateStatus.textContent = ToySPNMessages.error(e);
+    }
   });
 
   // --- Crypto actions ---
   const ptEl = $('#pt'), ctEl = $('#ct'), cryptoStatus = $('#crypto-status');
   const stepsEl = $('#steps');
 
+  const readInteger = (input, min, max, code) => {
+    try { return ToySPN.parseInteger(input.value, min, max); }
+    catch (_) { throw Object.assign(new Error(code), { code }); }
+  };
+
   const collectParams = () => {
     const okS = ToySPN.isBijection(S,16);
     const okP = ToySPN.isBijection(P,16);
-    if (!okS || !okP) throw new Error('S and P must be bijective.');
-    const R = Math.max(1, Math.min(16, parseInt(roundsEl.value||'8',10)));
+    if (!okS || !okP) throw Object.assign(new Error('invalidTables'), { code: 'invalidTables' });
+    const R = readInteger(roundsEl, 1, 16, 'invalidRounds');
     const mk = ToySPN.hex16ToNum(mkeyEl.value);
     const rks = ToySPN.deriveRoundKeys(mk, R);
     return { R, mk, rks };
@@ -517,7 +536,7 @@
       cryptoStatus.textContent = '暗号化完了 ✅';
       cryptoStatus.className = 'status ok';
     }catch(e){
-      cryptoStatus.textContent = e.message;
+      cryptoStatus.textContent = ToySPNMessages.error(e);
       cryptoStatus.className = 'status bad';
     }
   });
@@ -535,7 +554,7 @@
       cryptoStatus.textContent = '復号完了 ✅';
       cryptoStatus.className = 'status ok';
     }catch(e){
-      cryptoStatus.textContent = e.message;
+      cryptoStatus.textContent = ToySPNMessages.error(e);
       cryptoStatus.className = 'status bad';
     }
   });
@@ -609,7 +628,7 @@
   avBtn.addEventListener('click', ()=>{
     try{
       const { rks } = collectParams();
-      const t = Math.max(10, Math.min(2000, parseInt(trialsEl.value||'200',10)));
+      const t = readInteger(trialsEl, 10, 2000, 'invalidTrials');
       avStatus.textContent = '実行中...';
       setTimeout(()=>{
         const { hist, avg } = ToySPNAnalysis.avalancheTrials(t, S, P, rks);
@@ -690,7 +709,7 @@
         avStatus.className = 'status ok';
       }, 10);
     }catch(e){
-      avStatus.textContent = e.message;
+      avStatus.textContent = ToySPNMessages.error(e);
       avStatus.className = 'status bad';
     }
   });

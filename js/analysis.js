@@ -10,6 +10,7 @@
 
 (function(global){
   'use strict';
+  const ToySPN = global.ToySPN || (typeof require === 'function' ? require('./core.js') : null);
 
   // =========================================================
   // ヘルパー関数
@@ -17,20 +18,11 @@
 
   /**
    * 暗号学的に安全な16ビット乱数を生成
-   * crypto.getRandomValues が使える場合はそれを使用し、
-   * 使えない場合は Math.random() にフォールバック
+   * Web Cryptoが使えない場合は失敗として呼び出し側へ通知する
    *
    * @returns {number} 0〜0xFFFFのランダムな16ビット整数
    */
-  const rand16 = () => {
-    if (window.crypto && crypto.getRandomValues){
-      const buf = new Uint16Array(1);
-      crypto.getRandomValues(buf);
-      return buf[0];
-    }
-    // フォールバック（暗号学的に安全でない）
-    return (Math.random()*0x10000) & 0xFFFF;
-  };
+  const rand16 = () => ToySPN.random16();
 
   /**
    * ハミング距離（反転ビット数）を計算
@@ -60,7 +52,7 @@
    * アバランシェ効果（なだれ効果）テストを実行
    *
    * 平文の1ビットだけを反転させた場合、暗号文が何ビット変化するかを測定。
-   * 理想的なブロック暗号では、平均して50%（8/16ビット）が変化する。
+   * 各出力ビットが確率1/2で反転するモデルの平均は8ビット。安全性は判定しない。
    *
    * アルゴリズム:
    * 1. ランダムな平文を生成
@@ -77,10 +69,17 @@
    *   - hist: 反転ビット数の分布（インデックス0〜16）
    *   - avg: 平均反転ビット数
    */
-  const avalancheTrials = (trials, S, P, roundKeys) => {
-    // 逆写像は使わないが、一貫性のため計算
-    const invS = ToySPN.invertSBox(S);
-    const invP = ToySPN.invertPermutation(P);
+  const avalancheTrials = (trials, S, P, roundKeys, random = rand16) => {
+    if (!Number.isInteger(trials) || trials < 10 || trials > 2000) {
+      throw Object.assign(new Error('invalidTrials'), { code: 'invalidTrials' });
+    }
+    if (!ToySPN.isBijection(S,16) || !ToySPN.isBijection(P,16)) {
+      throw Object.assign(new Error('invalidTables'), { code: 'invalidTables' });
+    }
+    if (!Array.isArray(roundKeys) || roundKeys.length < 1 || roundKeys.length > 16 ||
+        !roundKeys.every(k => Number.isInteger(k) && k >= 0 && k <= 0xFFFF)) {
+      throw Object.assign(new Error('invalidRounds'), { code: 'invalidRounds' });
+    }
 
     // ヒストグラム: hist[i] = 反転ビット数がiだった回数
     const hist = new Array(17).fill(0);
@@ -88,9 +87,13 @@
 
     for (let i = 0; i < trials; i++){
       // ランダムな平文
-      const pt = rand16();
+      const pt = random();
       // ランダムに1ビット選択
-      const bit = 1 << (rand16() % 16);
+      const position = random();
+      if (![pt, position].every(n => Number.isInteger(n) && n >= 0 && n <= 0xFFFF)) {
+        throw Object.assign(new Error('randomUnavailable'), { code: 'randomUnavailable' });
+      }
+      const bit = 1 << (position % 16);
       // 1ビットだけ反転した平文
       const pt2 = pt ^ bit;
 
@@ -122,7 +125,14 @@
    */
   const drawHistogram = (canvas, hist) => {
     const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
+    const W = Math.max(180, canvas.getBoundingClientRect().width), H = 240;
+    const scale = global.devicePixelRatio || 1;
+    canvas.width = Math.round(W * scale);
+    canvas.height = Math.round(H * scale);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.fillStyle = '#1f2937';
+    ctx.strokeStyle = '#1f2937';
+    ctx.font = '12px monospace';
 
     // キャンバスをクリア
     ctx.clearRect(0,0,W,H);
@@ -143,15 +153,14 @@
       const v = hist[i];
       // 高さを最大値に対する割合で計算
       const h = Math.floor((H - 50) * (v / maxV));
-      const x = 40 + i * barW + 4;
+      const x = 40 + i * barW + 1;
       const y = (H-30) - h;
 
       // バーを描画
-      ctx.fillRect(x, y, barW - 8, h);
+      ctx.fillRect(x, y, Math.max(1, barW - 2), h);
 
       // X軸ラベル（反転ビット数）
-      ctx.font = '10px monospace';
-      ctx.fillText(String(i), x+2, H-15);
+      if (W >= 420 || i % 2 === 0) ctx.fillText(String(i), x, H-12);
     }
   };
 
@@ -167,5 +176,6 @@
     avalancheTrials,   // アバランシェテスト実行
     drawHistogram      // ヒストグラム描画
   };
+  if (typeof module !== 'undefined' && module.exports) module.exports = global.ToySPNAnalysis;
 
-})(window);
+})(typeof window !== 'undefined' ? window : globalThis);

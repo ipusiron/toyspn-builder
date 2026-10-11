@@ -1,134 +1,127 @@
 # セキュリティ対策
 
-このドキュメントは、ToySPN Builderにおけるセキュリティ対策について説明します。
+このドキュメントは、ToySPN Builderのブラウザー上の対策と、教材としての限界を説明します。
+Webアプリの対策と、16ビット暗号の安全性は別の問題です。
 
 ## 実装済みのセキュリティ対策
 
-### 1. XSS (Cross-Site Scripting) 対策
+### 1. XSS対策
 
-#### innerHTML の安全な置き換え
-- **問題**: `innerHTML` を使用すると、悪意のあるスクリプトが注入される可能性があります
-- **対策**: すべての動的コンテンツ生成を `textContent` と `createElement` に変更
-- **影響範囲**:
-  - 暗号化/復号ステップ表示 (`renderEncryptSteps`, `renderDecryptSteps`)
-  - 検証結果表示 (`validateStatus`)
-  - ヒストグラムテーブル (`histogram-tbody`)
-  - 専門家ヒント (`hint-content`)
-  - SVGマーカー生成 (S-Box/P層の可視化)
+動的な値はtextContentで描画します。
+HTMLの文字列として組み立てず、要素はcreateElementで生成します。
+内容のクリアにはreplaceChildrenを使います。
 
-#### 具体例
+対象は暗号化と復号の手順、設定検証、ヒストグラム表、観測結果の解説です。
+日英辞書の文字列もHTMLとして解釈しません。
+
 ```javascript
-// 変更前（脆弱）
-div.innerHTML = `<h4>ラウンド ${s.round}</h4>`;
-
-// 変更後（安全）
 const h4 = document.createElement('h4');
-h4.textContent = `ラウンド ${s.round}`;
+ToySPNMessages.text(h4, 'ラウンド {0}', s.round);
 div.appendChild(h4);
 ```
 
-### 2. 入力バリデーション強化
+ユーザー入力をHTMLとして扱わないことが対策です。
+数値だけを埋め込んだコード例を理由に、実際にXSSが成立するとは判断しません。
 
-#### 16進数入力の厳格化 (`clampHex16`)
-- **対策内容**:
-  - 型チェック: `typeof s !== 'string'` でstring以外を拒否
-  - 文字セット制限: `/[^0-9a-fA-F]/g` で16進数以外を除去
-  - 長さ制限: 最大4文字に制限
-  - 空文字列対策: デフォルト値 `'0000'` を設定
+### 2. 入力バリデーション
 
-#### 数値変換の安全性 (`hex16ToNum`, `numToHex16`)
-- **対策内容**:
-  - `Number.isFinite()` による不正な数値（NaN, Infinity等）の検出
-  - ビットマスク `& 0xFFFF` による範囲制限
+平文、暗号文、鍵は前後の空白を除き、16進数1〜4桁であることを検証します。
+不正な文字を削ったり、空欄を0にしたりして実行しません。
 
 ```javascript
-const hex16ToNum = (h) => {
-  const clamped = clampHex16(h);
-  const num = parseInt(clamped, 16);
-  return (Number.isFinite(num) ? num : 0) & 0xFFFF;
+const clampHex16 = (s) => {
+  if (typeof s !== 'string' || !/^[0-9a-fA-F]{1,4}$/.test(s.trim())) fail('invalidHex');
+  return s.trim().toUpperCase().padStart(4, '0');
 };
 ```
 
+- ラウンド数：1〜16の整数
+- 試行回数：10〜2000の整数
+- S-Box：0〜Fが重複なく1回ずつ現れる16要素
+- P層：0〜15が重複なく1回ずつ現れる16要素
+- IME変換中：実行を拒否
+
+内部のビットマスクは16ビット演算のためであり、入力検証の代わりではありません。
+UIと解析APIで表とパラメーターを検証してから、低レベルの変換関数へ渡します。
+
 ### 3. Content Security Policy (CSP)
 
-#### 厳格なCSPヘッダー
+index.htmlのmetaタグで次の方針を指定します。
+
 ```html
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'self';
-               script-src 'self';
-               style-src 'self' 'unsafe-inline';
-               img-src 'self' data: https:;
-               font-src 'self';
-               connect-src 'self';
-               frame-ancestors 'none';
-               base-uri 'self';
-               form-action 'self';" />
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none'; script-src 'self'; style-src 'self';
+  img-src 'self' data:; connect-src 'none'; base-uri 'none';
+  form-action 'none'; object-src 'none';
+">
 ```
 
-#### 各ディレクティブの説明
-- `default-src 'self'`: すべてのリソースを同一オリジンに制限
-- `script-src 'self'`: インラインスクリプトを禁止（外部ファイルのみ許可）
-- `style-src 'self' 'unsafe-inline'`: CSSは同一オリジン + インラインを許可
-- `img-src 'self' data: https:`: 画像は同一オリジン + data URI + HTTPS
-- `frame-ancestors 'none'`: クリックジャッキング対策（iframe埋め込み禁止）
-- `base-uri 'self'`: base要素の悪用を防止
-- `form-action 'self'`: フォーム送信先を同一オリジンに制限
+- スクリプトとCSS：同一オリジンのファイルだけを許可
+- 画像：同一オリジンとdata URLを許可
+- 接続、フォーム送信、base要素、プラグイン：禁止
+- インラインスクリプトとeval：許可しない
+- 外部CDN：使用しない
 
-### 4. その他のセキュリティヘッダー
+この指定だけですべての攻撃を防げるわけではありません。
+入力の検証と、HTMLとして解釈させない描画を併用します。
 
-#### X-Content-Type-Options
+### 4. Referrer PolicyとHTTPヘッダーの限界
+
 ```html
-<meta http-equiv="X-Content-Type-Options" content="nosniff" />
+<meta name="referrer" content="no-referrer">
 ```
-- MIMEタイプスニッフィング攻撃を防止
 
-#### X-Frame-Options
-```html
-<meta http-equiv="X-Frame-Options" content="DENY" />
-```
-- クリックジャッキング攻撃を防止（すべてのframe埋め込みを拒否）
+このページからのリファラー送信を制限します。
+別タブで開くリンクにはnoopener noreferrerを付けています。
 
-#### Referrer Policy
-```html
-<meta name="referrer" content="no-referrer" />
-```
-- リファラー情報の漏洩を防止
+frame-ancestorsはmeta CSPでは無視されます。
+X-Frame-OptionsとX-Content-Type-OptionsもHTTPレスポンスヘッダー専用で、metaに書いても防御になりません。
+このプロジェクトは、これらによる埋め込み拒否やMIME制御を保証しません。
+根拠は[W3C CSP仕様](https://www.w3.org/TR/CSP/#directive-frame-ancestors)を参照してください。
 
-### 5. SVG生成のセキュリティ
+### 5. SVGと乱数の扱い
 
-#### SVG要素の安全な生成
-- `createElementNS` を使用してSVG要素を動的に生成
-- `innerHTML` を避け、`setAttribute` と `textContent` を使用
+SVG要素はcreateElementNSで生成します。
+線の座標やラベルは検証済みの表に基づき、不正な表の対応線は描きません。
+矢印先端の定義は各SVGで1つにし、IDも分けています。
 
-```javascript
-// 変更前（脆弱）
-defs.innerHTML = `<marker id="arrowhead">...</marker>`;
-
-// 変更後（安全）
-const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-marker.setAttribute('id', 'arrowhead');
-// ... 他の属性設定
-defs.appendChild(marker);
-```
+ランダム生成はWeb CryptoのgetRandomValuesを使います。
+取得できなければエラーを通知し、Math.randomへの代替は行いません。
+乱数の品質が高くても、16ビット鍵の総数は変わりません。
 
 ## 残存リスクと制限事項
 
-### 教育用ツールであることの明示
-- このツールは教育目的であり、実運用の暗号化には使用できません
-- ブロックサイズが小さく（16ビット）、暗号学的強度は不十分です
+### 教育用暗号の限界
+
+- 鍵とブロックは16ビット。鍵は65,536通り
+- なだれ効果の平均や分布は暗号の安全性やSACの証明にならない
+- 全単射は復号可能性の条件であり、非線形性や安全性の保証ではない
+- 認証、暗号利用モード、ファイル暗号化は未実装
+- 実際の秘密情報を保護する目的には使用不可
+
+### 保存と通信
+
+入力値と解析結果を送信する機能はありません。
+ページの初回取得では配信元への通信が発生します。
+言語の選択だけをlocalStorageに保存し、鍵や入力値、結果は保存しません。
+
+入力や鍵はページを開いている間、DOMとJavaScriptのメモリーに存在します。
+ブラウザー拡張や端末上の別のソフトウェアから秘密を守る設計ではありません。
+このツールへ本物の秘密情報を入力しないでください。
 
 ### GitHub Pagesの制限
-- `.htaccess` や サーバー設定による追加のセキュリティヘッダーは設定できません
-- メタタグによるCSPには一部ブラウザーで制限があります
 
-## セキュリティチェックリスト
+このリポジトリから任意のHTTPレスポンスヘッダーを設定することはできません。
+ヘッダーによる制御が必要な場合は、それを設定できる配信環境が必要です。
+PagesではHTTPSを使用し、公開後にも実際の応答とブラウザー動作を確認します。
 
-デプロイ前に以下を確認してください：
+## 公開前のチェックリスト
 
-- [ ] すべての `innerHTML` が安全な代替手段に置き換えられている
-- [ ] ユーザー入力が適切にバリデーションされている
-- [ ] CSPヘッダーが設定されている
-- [ ] セキュリティ関連のメタタグが設定されている
-- [ ] JavaScriptの構文エラーがない (`node -c js/*.js`)
-- [ ] ブラウザーコンソールにエラーが出ていない
-- [ ] すべての機能が正常に動作している
+- [ ] npm testがすべて成功している
+- [ ] 動的な値がHTMLとして解釈されない
+- [ ] 不正な入力、乱数取得失敗、IME変換中の操作を確認した
+- [ ] 設定変更後に古い結果が残らない
+- [ ] 日英切替で計算が再実行されず、入力と結果が維持される
+- [ ] HTTPとfile://でconsoleとCSPのエラーがない
+- [ ] 狭い画面、非表示パネル、キーボード操作を確認した
+- [ ] 公開されたファイルがmainの内容と一致する

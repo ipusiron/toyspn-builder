@@ -21,13 +21,13 @@ python -m http.server 8000
 ```
 
 **Deployment:**
-The app is deployed via GitHub Pages. Simply push changes to the main branch - no build step required.
+The app is deployed via GitHub Pages. Use a work branch and a PR. Wait for both push and pull_request Test runs to succeed, then use an ordinary merge. Do not push directly to main. Verify main CI, Pages, public file hashes, and browser behavior before backed-up branch cleanup. No build step is required.
 
 ## Architecture
 
 ### Core Components
 
-**Three-module architecture (IIFE pattern, no global pollution):**
+**Four-module architecture (IIFE with explicit public APIs):**
 
 1. **js/core.js** - Core cipher primitives → exports `window.ToySPN`
    - 16-bit block operations: S-box substitution (4-bit nibbles), bit permutation (P-layer), XOR key addition
@@ -35,12 +35,17 @@ The app is deployed via GitHub Pages. Simply push changes to the main branch - n
    - Key schedule: rotate + XOR with round constants
    - `encryptBlock()` / `decryptBlock()` - main cipher functions with optional step-by-step trace
 
-2. **js/analysis.js** - Cryptanalysis tools → exports `window.ToySPNAnalysis`
+2. **js/analysis.js** - Avalanche observations → exports `window.ToySPNAnalysis`
    - Avalanche test implementation: measures output bit changes from 1-bit input differences
    - Histogram rendering for distribution visualization
-   - Uses `crypto.getRandomValues()` for randomness (fallback to Math.random)
+   - Uses the core Web Crypto random source; failure is explicit and there is no Math.random fallback
 
-3. **js/ui.js** - DOM manipulation & event handling (no exports, self-contained IIFE)
+3. **js/messages.js** - Japanese/English dictionaries and rendering-only language switching
+   - Language order: valid ?lang=ja|en, saved preference, browser locale (non-Japanese uses English)
+   - Optional localStorage stores only language; storage failure must not break the app
+   - Numeric results and inputs must survive language switching without recomputation
+
+4. **js/ui.js** - DOM manipulation & event handling (no exports, self-contained IIFE)
    - Tab navigation between Designer/Crypto/Analysis/Learn panels
    - Grid editors for S-box (16 hex values) and P-layer (16 bit positions) with real-time bijection validation
    - Encrypt/Decrypt UI with step-by-step trace display
@@ -62,18 +67,19 @@ Both S-box and P-layer MUST be bijective (invertible) for decryption to work. Th
 
 ### UI State Management
 
-Global state in ui.js:
+State scoped inside the ui.js IIFE:
 - `S[]` - current S-box (16 elements)
 - `P[]` - current P-layer (16 elements)
 - Master key and rounds count read from inputs on-demand
 
-Changes to S or P immediately update validation status. Encryption/decryption reads current state when triggered.
+Changes update validation and invalidate dependent results. Analysis snapshots S, P, key, rounds, and trials. A generation counter cancels queued stale work. Catch errors inside the delayed callback. Keep derived UI consistent for input, reset, identity, randomization, sample, IME, and language actions.
 
 ## Key Implementation Details
 
 **16-bit constraints:**
 - All operations use `& 0xFFFF` masking
-- Hex inputs clamped to 4 characters
+- Hex inputs must contain 1–4 digits after trimming; invalid values are rejected, never filtered or truncated
+- Rounds are integers 1–16; trials are integers 10–2000
 - Bit indices 0-15, nibble indices 0-3
 
 **Permutation semantics:**
@@ -85,20 +91,31 @@ Changes to S or P immediately update validation status. Encryption/decryption re
 - Rounds: 8
 - Master key example: `C0DE`
 
-**Avalanche ideal:** ~8 bits flipped on average (50% of 16 bits) for good diffusion
+**Observation limits:** A model with flip probability 1/2 per output bit has mean 8. This tool does not test SAC or security. More rounds do not guarantee more diffusion. A bijection need not be nonlinear. The rotation/XOR key schedule is affine and does not guarantee independent round keys.
 
 ## Security Implementation
 
 This project emphasizes XSS prevention as an educational example:
 - **No innerHTML** - all dynamic content uses `textContent` and `createElement`
-- **CSP headers** - `script-src 'self'` blocks inline scripts
-- **Input validation** - `clampHex16()` uses whitelist filtering (`/[^0-9a-fA-F]/g`)
+- **Meta CSP** - self-hosted JS/CSS, connect-src 'none', no unsafe-inline/eval. HTTP-only frame-ancestors/XFO cannot be enforced by meta
+- **Input validation** - `clampHex16()` requires the complete input to match `/^[0-9a-fA-F]{1,4}$/`
 
 ## Educational Context
 
 This is a teaching tool demonstrating how modern block ciphers combine:
-1. Nonlinearity (S-box) to prevent linear attacks
-2. Diffusion (P-layer) to spread bit changes
-3. Key mixing (XOR) for security
+1. Substitution (S-box), with nonlinearity depending on the chosen table
+2. Permutation (P-layer), which preserves the number of changed bits and redistributes them between S-boxes
+3. Key mixing (XOR), which makes the transform key-dependent without proving security
 
-The small block size (16-bit) and limited rounds (8) are intentionally weak for educational purposes - NOT for production use.
+The block and key are only 16 bits (65,536 keys); this is NOT for protecting secrets or for production use.
+
+## Verification and documentation
+
+- Run `npm test` with Node.js 22 or newer. No npm install is required.
+- Preserve the default vector: plaintext 1234, key C0DE, 8 rounds → FBC6.
+- Preserve the round constants and default tables; verify all 65,536 default plaintexts round-trip.
+- Use DOM text APIs, meaningful labels, hidden states, 44px controls, and responsive layouts.
+- Check HTTP and file://, Japanese and English, keyboard navigation, errors, and widths 320/390/800/1280.
+- Keep README.md metadata unchanged, translate all corresponding sections into README.en.md, and update both screenshot sets.
+- Do not describe unimplemented behavior, invented performance gains, or comparisons with past versions.
+- Commit each verified stage. Stop and report after two unsuccessful repairs at one gate; never weaken expected results.

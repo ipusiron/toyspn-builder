@@ -17,26 +17,48 @@
 (function(global){
   'use strict';
 
+  const fail = (code) => { throw Object.assign(new Error(code), { code }); };
+  const parseInteger = (value, min, max) => {
+    if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) fail('invalidInteger');
+    const number = Number(value.trim());
+    if (!Number.isSafeInteger(number) || number < min || number > max) fail('invalidInteger');
+    return number;
+  };
+
+  const random16 = () => {
+    if (!global.crypto || typeof global.crypto.getRandomValues !== 'function') fail('randomUnavailable');
+    try {
+      return global.crypto.getRandomValues(new Uint16Array(1))[0];
+    } catch (_) {
+      return fail('randomUnavailable');
+    }
+  };
+  const shuffledTable = () => {
+    const table = Array.from({ length: 16 }, (_, i) => i);
+    for (let i = 15; i > 0; i--) {
+      const limit = 65536 - (65536 % (i + 1));
+      let value;
+      do { value = random16(); } while (value >= limit);
+      const j = value % (i + 1);
+      [table[i], table[j]] = [table[j], table[i]];
+    }
+    return table;
+  };
+
   // =========================================================
   // ユーティリティ関数
   // =========================================================
 
   /**
    * 16進数文字列を正規化し、4桁に整形する
-   * セキュリティ: 型チェック、不正文字削除、長さ制限
+   * 前後の空白以外を変更せず検証し、不正入力は拒否する
    *
    * @param {string} s - 入力文字列
    * @returns {string} 4桁の16進数文字列（例: "C0DE"）
    */
   const clampHex16 = (s) => {
-    // 型チェック: string以外は空文字列に変換
-    if (typeof s !== 'string') s = '';
-    // 16進数文字以外を削除し、大文字化
-    s = s.trim().replace(/[^0-9a-fA-F]/g, '').toUpperCase();
-    // 空文字列は0000に変換
-    if (s.length === 0) s = '0000';
-    // 4桁超過は下位4桁のみ取得
-    if (s.length > 4) s = s.slice(-4);
+    if (typeof s !== 'string' || !/^[0-9a-fA-F]{1,4}$/.test(s.trim())) fail('invalidHex');
+    s = s.trim().toUpperCase();
     // 左側を0でパディングして4桁に
     return s.padStart(4, '0');
   };
@@ -102,7 +124,7 @@
 
   /**
    * S-Box（4bit置換）を4つのニブルに適用
-   * 非線形変換の核心部分
+   * 非線形性は表の内容による（恒等表など線形な表も許可）
    *
    * @param {number} x - 入力16ビット値（4ニブル）
    * @param {Array<number>} S - S-Boxテーブル（長さ16、0x0〜0xFの順列）
@@ -158,7 +180,7 @@
    */
   const isBijection = (arr, size) => {
     // 長さチェック
-    if (arr.length !== size) return false;
+    if (!Array.isArray(arr) || arr.length !== size) return false;
     // 重複チェック: Set のサイズが配列長と一致するか
     const seen = new Set(arr);
     if (seen.size !== size) return false;
@@ -192,7 +214,7 @@
 
   /**
    * ラウンド定数（Round Constants）
-   * 各ラウンドで異なる定数をXORすることで鍵の独立性を高める
+   * 教育用の固定列。重複を含み、独立したラウンド鍵は保証しない
    */
   const RC = [
     0xB7E1, 0x9E37, 0xC6EF, 0x52C6, 0x35A7, 0x1F12, 0x9E37, 0xB7E1,
@@ -208,6 +230,8 @@
    * @returns {Array<number>} ラウンド鍵配列（長さ=rounds）
    */
   const deriveRoundKeys = (masterKey, rounds) => {
+    if (!Number.isInteger(masterKey) || masterKey < 0 || masterKey > 0xFFFF) fail('invalidHex');
+    if (!Number.isInteger(rounds) || rounds < 1 || rounds > 16) fail('invalidRounds');
     const keys = [];
     let k = masterKey & 0xFFFF;
     for (let r = 0; r < rounds; r++){
@@ -321,7 +345,7 @@
    */
   global.ToySPN = {
     // ユーティリティ
-    clampHex16, hex16ToNum, numToHex16,
+    clampHex16, hex16ToNum, numToHex16, parseInteger, random16, shuffledTable,
     // 逆写像・検証
     invertPermutation, invertSBox, isBijection,
     // コア変換
@@ -331,5 +355,6 @@
     // 暗号化/復号
     deriveRoundKeys, encryptBlock, decryptBlock
   };
+  if (typeof module !== 'undefined' && module.exports) module.exports = global.ToySPN;
 
-})(window);
+})(typeof window !== 'undefined' ? window : globalThis);

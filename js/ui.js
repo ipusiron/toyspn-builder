@@ -5,31 +5,128 @@
   // --- DOM helpers ---
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const M = ToySPNMessages;
+  let lastHistogram = null;
+  let runVersion = 0;
+  let pendingAnalysis = null;
+  let composing = false;
+
+  const clearAnalysis = () => {
+    lastHistogram = null;
+    runVersion++;
+    clearTimeout(pendingAnalysis);
+    pendingAnalysis = null;
+    $('#btn-avalanche').disabled = composing;
+    $('#analysis').removeAttribute('aria-busy');
+    $('#chart').getContext('2d').clearRect(0, 0, $('#chart').width, $('#chart').height);
+    M.clear($('#avalanche-summary'));
+    $('#histogram-tbody').replaceChildren();
+    $('#histogram-table').hidden = true;
+    $('#expert-hint').hidden = true;
+    $('#hint-content').replaceChildren();
+    M.clear($('#avalanche-status'));
+    $('#avalanche-status').className = 'status';
+  };
+  const invalidate = (scope = 'all') => {
+    if (scope !== 'crypto') clearAnalysis();
+    if (scope === 'analysis') return;
+    $('#steps').replaceChildren();
+    const status = $('#crypto-status');
+    if (status.textContent) M.text(status, ToySPNMessages.ja.changed);
+    status.className = 'status';
+    $('#validate-result').hidden = true;
+    M.clear($('#validate-status'));
+  };
+  const ensureCommitted = () => {
+    if (composing) throw Object.assign(new Error('composing'), { code: 'composing' });
+  };
+  document.addEventListener('compositionstart', () => {
+    composing = true;
+    invalidate();
+  });
+  document.addEventListener('compositionend', () => {
+    composing = false;
+    invalidate();
+  });
 
   // Tabs
-  $$('.tab').forEach(btn=>{
+  $('.tabs').setAttribute('role', 'tablist');
+  $('.tabs').setAttribute('aria-label', '操作画面');
+  $$('.tab').forEach((btn, index)=>{
+    btn.id = 'tab-' + btn.dataset.tab;
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-controls', btn.dataset.tab);
+    btn.setAttribute('aria-selected', String(index === 0));
+    btn.tabIndex = index === 0 ? 0 : -1;
+    const panel = $('#' + btn.dataset.tab);
+    panel.setAttribute('role', 'tabpanel');
+    panel.setAttribute('aria-labelledby', btn.id);
+    panel.hidden = index !== 0;
+    btn.addEventListener('keydown', event => {
+      const tabs = $$('.tab');
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+      if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = tabs.length - 1;
+      if (next !== undefined) {
+        event.preventDefault(); tabs[next].click(); tabs[next].focus();
+      }
+    });
     btn.addEventListener('click', ()=>{
-      $$('.tab').forEach(b=>b.classList.remove('active'));
-      $$('.panel').forEach(p=>p.classList.remove('active'));
+      $$('.tab').forEach(b=>{
+        b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); b.tabIndex = -1;
+      });
+      $$('.panel').forEach(p=>{ p.classList.remove('active'); p.hidden = true; });
       btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true'); btn.tabIndex = 0;
       $('#'+btn.dataset.tab).classList.add('active');
+      $('#'+btn.dataset.tab).hidden = false;
     });
   });
+  $$('.help-icon').forEach((button, i) => {
+    button.setAttribute('aria-expanded', 'false');
+    const content = button.querySelector('.tooltip');
+    content.id = 'help-' + i;
+    button.setAttribute('aria-controls', content.id);
+    content.hidden = true;
+    button.addEventListener('click', () => {
+      const open = button.getAttribute('aria-expanded') !== 'true';
+      button.setAttribute('aria-expanded', String(open)); content.hidden = !open;
+    });
+    button.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        button.setAttribute('aria-expanded', 'false'); content.hidden = true;
+      }
+    });
+  });
+  document.addEventListener('click', event => {
+    $$('.help-icon').forEach(button => {
+      if (!button.contains(event.target)) {
+        button.setAttribute('aria-expanded', 'false'); button.querySelector('.tooltip').hidden = true;
+      }
+    });
+  });
+  $$('.status, #validate-status').forEach(el => el.setAttribute('aria-live', 'polite'));
 
   // --- S-Box grid ---
   const sGrid = $('#sbox-grid');
   const makeSBoxInputs = (S) => {
-    sGrid.innerHTML = '';
+    sGrid.replaceChildren();
     for (let i = 0; i < 16; i++){
       const div = document.createElement('div');
       div.className = 'grid16-item';
 
       const label = document.createElement('label');
       label.className = 'grid-label';
-      label.textContent = i.toString(16).toUpperCase();
+      M.text(label, i.toString(16).toUpperCase());
+      label.htmlFor = 'sbox-' + i;
 
       const inp = document.createElement('input');
       inp.type = 'text';
+      inp.id = 'sbox-' + i;
+      inp.setAttribute('aria-label', M.t('S-Box 入力{0}の出力', i.toString(16).toUpperCase()));
+      inp.autocomplete = 'off';
       inp.maxLength = 1;
       inp.value = S[i].toString(16).toUpperCase();
       inp.dataset.idx = String(i);
@@ -44,8 +141,9 @@
     const arr = [];
     $$('#sbox-grid .grid16-item input').forEach(inp=>{
       const v = inp.value.trim();
-      const n = parseInt(v || '0', 16);
-      arr.push((Number.isFinite(n) ? n : 0) & 0xF);
+      const valid = /^[0-9a-fA-F]$/.test(v);
+      inp.setAttribute('aria-invalid', String(!valid));
+      arr.push(valid ? parseInt(v, 16) : NaN);
     });
     return arr;
   };
@@ -56,11 +154,14 @@
     const arrows = $('#arrows');
 
     // Clear previous
-    inputDots.innerHTML = '';
-    outputDots.innerHTML = '';
-    arrows.innerHTML = '';
+    inputDots.replaceChildren();
+    outputDots.replaceChildren();
+    arrows.replaceChildren();
 
-    // Add arrowhead marker
+    if (!ToySPN.isBijection(S, 16)) return;
+
+    // Reuse one definition per SVG.
+    if (!svg.querySelector('defs')) {
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
     marker.setAttribute('id', 'arrowhead');
@@ -75,6 +176,7 @@
     marker.appendChild(polygon);
     defs.appendChild(marker);
     svg.insertBefore(defs, svg.firstChild);
+    }
 
     const startX = 60;
     const spacing = 46;
@@ -97,7 +199,7 @@
       inputText.setAttribute('x', x);
       inputText.setAttribute('y', inputY - 12);
       inputText.setAttribute('class', 'viz-text');
-      inputText.textContent = i.toString(16).toUpperCase();
+      M.text(inputText, i.toString(16).toUpperCase());
       inputDots.appendChild(inputText);
 
       // Output dot
@@ -112,7 +214,7 @@
       outputText.setAttribute('x', x);
       outputText.setAttribute('y', outputY + 18);
       outputText.setAttribute('class', 'viz-text');
-      outputText.textContent = i.toString(16).toUpperCase();
+      M.text(outputText, i.toString(16).toUpperCase());
       outputDots.appendChild(outputText);
     }
 
@@ -127,10 +229,11 @@
       line.setAttribute('x2', outputX);
       line.setAttribute('y2', outputY - 5);
       line.setAttribute('class', 'viz-arrow');
+      line.setAttribute('marker-end', 'url(#arrowhead)');
 
       // Add title for hover
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = `${i.toString(16).toUpperCase()} → ${S[i].toString(16).toUpperCase()}`;
+      M.text(title, `${i.toString(16).toUpperCase()} → ${S[i].toString(16).toUpperCase()}`);
       line.appendChild(title);
 
       arrows.appendChild(line);
@@ -138,9 +241,10 @@
   };
 
   const onSBoxChange = () => {
+    invalidate();
     S = readSBox();
     const ok = ToySPN.isBijection(S,16);
-    sStatus.textContent = ok ? '全単射 ✅' : '全単射ではありません ❌';
+    M.text(sStatus, ok ? '全単射 ✅' : '全単射ではありません ❌');
     sStatus.className = 'status ' + (ok ? 'ok' : 'bad');
     drawSBoxVisualization(S);
   };
@@ -151,14 +255,12 @@
   });
 
   $('#sbox-random').addEventListener('click', ()=>{
-    // Fisher-Yates shuffle to maintain bijection
-    S = Array.from({length: 16}, (_, i) => i);
-    for (let i = 15; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [S[i], S[j]] = [S[j], S[i]];
-    }
+    try {
+    ensureCommitted();
+    S = ToySPN.shuffledTable();
     makeSBoxInputs(S);
     onSBoxChange();
+    } catch (e) { M.text(sStatus, ToySPNMessages.error(e)); }
   });
 
   $('#sbox-identity').addEventListener('click', ()=>{
@@ -171,17 +273,20 @@
   // --- P-layer grid ---
   const pGrid = $('#player-grid');
   const makePLayerInputs = (P) => {
-    pGrid.innerHTML = '';
+    pGrid.replaceChildren();
     for (let i = 0; i < 16; i++){
       const div = document.createElement('div');
       div.className = 'grid16-item';
 
       const label = document.createElement('label');
       label.className = 'grid-label';
-      label.textContent = 'b' + i;
+      M.text(label, 'b' + i);
+      label.htmlFor = 'player-' + i;
 
       const inp = document.createElement('input');
       inp.type = 'number';
+      inp.id = 'player-' + i;
+      inp.setAttribute('aria-label', M.t('入力ビット{0}の移動先', i));
       inp.min = 0; inp.max = 15;
       inp.value = P[i];
       inp.dataset.idx = String(i);
@@ -195,8 +300,9 @@
   const readPLayer = () => {
     const arr = [];
     $$('#player-grid .grid16-item input').forEach(inp=>{
-      const n = parseInt((inp.value || '0'), 10);
-      arr.push((Number.isFinite(n) ? n : 0) & 0xF);
+      const valid = /^\d{1,2}$/.test(inp.value) && Number(inp.value) <= 15;
+      inp.setAttribute('aria-invalid', String(!valid));
+      arr.push(valid ? Number(inp.value) : NaN);
     });
     return arr;
   };
@@ -207,11 +313,14 @@
     const arrows = $('#player-arrows');
 
     // Clear previous
-    inputDots.innerHTML = '';
-    outputDots.innerHTML = '';
-    arrows.innerHTML = '';
+    inputDots.replaceChildren();
+    outputDots.replaceChildren();
+    arrows.replaceChildren();
 
-    // Add arrowhead marker
+    if (!ToySPN.isBijection(P, 16)) return;
+
+    // Reuse one definition per SVG.
+    if (!svg.querySelector('defs')) {
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
     marker.setAttribute('id', 'arrowhead-p');
@@ -226,6 +335,7 @@
     marker.appendChild(polygon);
     defs.appendChild(marker);
     svg.insertBefore(defs, svg.firstChild);
+    }
 
     const startX = 60;
     const spacing = 46;
@@ -248,7 +358,7 @@
       inputText.setAttribute('x', x);
       inputText.setAttribute('y', inputY - 12);
       inputText.setAttribute('class', 'viz-text');
-      inputText.textContent = i;
+      M.text(inputText, i);
       inputDots.appendChild(inputText);
 
       // Output dot
@@ -263,7 +373,7 @@
       outputText.setAttribute('x', x);
       outputText.setAttribute('y', outputY + 18);
       outputText.setAttribute('class', 'viz-text');
-      outputText.textContent = i;
+      M.text(outputText, i);
       outputDots.appendChild(outputText);
     }
 
@@ -282,7 +392,7 @@
 
       // Add title for hover
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = `b${i} → b${P[i]}`;
+      M.text(title, `b${i} → b${P[i]}`);
       line.appendChild(title);
 
       arrows.appendChild(line);
@@ -290,9 +400,10 @@
   };
 
   const onPLayerChange = () => {
+    invalidate();
     P = readPLayer();
     const ok = ToySPN.isBijection(P,16);
-    pStatus.textContent = ok ? '全単射 ✅' : '全単射ではありません ❌';
+    M.text(pStatus, ok ? '全単射 ✅' : '全単射ではありません ❌');
     pStatus.className = 'status ' + (ok ? 'ok' : 'bad');
     drawPLayerVisualization(P);
   };
@@ -303,14 +414,12 @@
   });
 
   $('#player-random').addEventListener('click', ()=>{
-    // Fisher-Yates shuffle to maintain bijection
-    P = Array.from({length: 16}, (_, i) => i);
-    for (let i = 15; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [P[i], P[j]] = [P[j], P[i]];
-    }
+    try {
+    ensureCommitted();
+    P = ToySPN.shuffledTable();
     makePLayerInputs(P);
     onPLayerChange();
+    } catch (e) { M.text(pStatus, ToySPNMessages.error(e)); }
   });
 
   $('#player-identity').addEventListener('click', ()=>{
@@ -342,23 +451,32 @@
 
   roundsMinBtn.addEventListener('click', ()=>{
     roundsEl.value = 1;
+    invalidate();
   });
 
   roundsMaxBtn.addEventListener('click', ()=>{
     roundsEl.value = 16;
+    invalidate();
   });
 
   keyRandomBtn.addEventListener('click', ()=>{
-    // Generate random 16-bit key
-    const randomKey = Math.floor(Math.random() * 0x10000);
-    mkeyEl.value = ToySPN.numToHex16(randomKey);
+    try {
+      ensureCommitted();
+      mkeyEl.value = ToySPN.numToHex16(ToySPN.random16());
+      invalidate();
+    } catch (e) {
+      validateResult.hidden = false;
+      M.text(validateStatus, ToySPNMessages.error(e));
+    }
   });
 
   validateBtn.addEventListener('click', ()=>{
+    try {
+    ensureCommitted();
     const okS = ToySPN.isBijection(S,16);
     const okP = ToySPN.isBijection(P,16);
     const mk = ToySPN.hex16ToNum(mkeyEl.value);
-    const R = Math.max(1, Math.min(16, parseInt(roundsEl.value||'8',10)));
+    const R = readInteger(roundsEl, 1, 16, 'invalidRounds');
     const keys = ToySPN.deriveRoundKeys(mk, R);
 
     // Build detailed result
@@ -366,7 +484,7 @@
     const pClass = okP ? 'ok' : 'ng';
     const overall = okS && okP;
 
-    validateStatus.innerHTML = '';
+    M.clear(validateStatus);
 
     const createDetailRow = (labelText, valueText, valueClass = '', isTotal = false) => {
       const row = document.createElement('div');
@@ -380,12 +498,12 @@
       const label = document.createElement('span');
       label.className = 'detail-label';
       if (isTotal) label.style.fontSize = '15px';
-      label.textContent = labelText;
+      M.text(label, labelText);
 
       const value = document.createElement('span');
       value.className = `detail-value ${valueClass}`;
       if (isTotal) value.style.fontSize = '15px';
-      value.textContent = valueText;
+      M.text(value, valueText);
 
       row.appendChild(label);
       row.appendChild(value);
@@ -399,31 +517,41 @@
     validateStatus.appendChild(createDetailRow('ラウンド鍵1', ToySPN.numToHex16(keys[0])));
     validateStatus.appendChild(createDetailRow('総合判定', overall ? '✅ 暗号化可能' : '❌ 設定エラー', overall ? 'ok' : 'ng', true));
 
-    validateResult.style.display = 'block';
+    validateResult.hidden = false;
+    } catch (e) {
+      validateResult.hidden = false;
+      M.text(validateStatus, ToySPNMessages.error(e));
+    }
   });
 
   // --- Crypto actions ---
   const ptEl = $('#pt'), ctEl = $('#ct'), cryptoStatus = $('#crypto-status');
   const stepsEl = $('#steps');
 
+  const readInteger = (input, min, max, code) => {
+    try { return ToySPN.parseInteger(input.value, min, max); }
+    catch (_) { throw Object.assign(new Error(code), { code }); }
+  };
+
   const collectParams = () => {
+    ensureCommitted();
     const okS = ToySPN.isBijection(S,16);
     const okP = ToySPN.isBijection(P,16);
-    if (!okS || !okP) throw new Error('S and P must be bijective.');
-    const R = Math.max(1, Math.min(16, parseInt(roundsEl.value||'8',10)));
+    if (!okS || !okP) throw Object.assign(new Error('invalidTables'), { code: 'invalidTables' });
+    const R = readInteger(roundsEl, 1, 16, 'invalidRounds');
     const mk = ToySPN.hex16ToNum(mkeyEl.value);
     const rks = ToySPN.deriveRoundKeys(mk, R);
     return { R, mk, rks };
   };
 
   const renderEncryptSteps = (steps) => {
-    stepsEl.innerHTML = '';
+    stepsEl.replaceChildren();
     steps.forEach(s => {
       const div = document.createElement('div');
       div.className = 'step-round';
 
       const h4 = document.createElement('h4');
-      h4.textContent = `ラウンド ${s.round}`;
+      M.text(h4, 'ラウンド {0}', s.round);
       div.appendChild(h4);
 
       const createRow = (label, value, showArrow = false) => {
@@ -431,17 +559,17 @@
         row.className = 'step-row';
         const labelSpan = document.createElement('span');
         labelSpan.className = 'step-label';
-        labelSpan.textContent = label;
+        M.text(labelSpan, label);
         row.appendChild(labelSpan);
         if (showArrow) {
           const arrow = document.createElement('span');
           arrow.className = 'step-arrow';
-          arrow.textContent = '↓';
+          M.text(arrow, '↓');
           row.appendChild(arrow);
         }
         const valueSpan = document.createElement('span');
         valueSpan.className = 'step-value';
-        valueSpan.textContent = value;
+        M.text(valueSpan, value);
         row.appendChild(valueSpan);
         return row;
       };
@@ -456,19 +584,19 @@
     if (steps.length === 0) {
       const div = document.createElement('div');
       div.className = 'step-round';
-      div.textContent = '表示するステップがありません';
+      M.text(div, '表示するステップがありません');
       stepsEl.appendChild(div);
     }
   };
 
   const renderDecryptSteps = (steps) => {
-    stepsEl.innerHTML = '';
+    stepsEl.replaceChildren();
     steps.forEach(s => {
       const div = document.createElement('div');
       div.className = 'step-round';
 
       const h4 = document.createElement('h4');
-      h4.textContent = `ラウンド ${s.round} (逆順)`;
+      M.text(h4, 'ラウンド {0} (逆順)', s.round);
       div.appendChild(h4);
 
       const createRow = (label, value, showArrow = false) => {
@@ -476,17 +604,17 @@
         row.className = 'step-row';
         const labelSpan = document.createElement('span');
         labelSpan.className = 'step-label';
-        labelSpan.textContent = label;
+        M.text(labelSpan, label);
         row.appendChild(labelSpan);
         if (showArrow) {
           const arrow = document.createElement('span');
           arrow.className = 'step-arrow';
-          arrow.textContent = '↓';
+          M.text(arrow, '↓');
           row.appendChild(arrow);
         }
         const valueSpan = document.createElement('span');
         valueSpan.className = 'step-value';
-        valueSpan.textContent = value;
+        M.text(valueSpan, value);
         row.appendChild(valueSpan);
         return row;
       };
@@ -501,7 +629,7 @@
     if (steps.length === 0) {
       const div = document.createElement('div');
       div.className = 'step-round';
-      div.textContent = '表示するステップがありません';
+      M.text(div, '表示するステップがありません');
       stepsEl.appendChild(div);
     }
   };
@@ -514,10 +642,10 @@
       const ct = ToySPN.encryptBlock(pt, S, P, rks, steps);
       ctEl.value = ToySPN.numToHex16(ct);
       renderEncryptSteps(steps);
-      cryptoStatus.textContent = '暗号化完了 ✅';
+      M.text(cryptoStatus, '暗号化完了 ✅');
       cryptoStatus.className = 'status ok';
     }catch(e){
-      cryptoStatus.textContent = e.message;
+      M.text(cryptoStatus, ToySPNMessages.error(e));
       cryptoStatus.className = 'status bad';
     }
   });
@@ -532,20 +660,29 @@
       const pt = ToySPN.decryptBlock(ct, invS, invP, rks, steps);
       ptEl.value = ToySPN.numToHex16(pt);
       renderDecryptSteps(steps);
-      cryptoStatus.textContent = '復号完了 ✅';
+      M.text(cryptoStatus, '復号完了 ✅');
       cryptoStatus.className = 'status ok';
     }catch(e){
-      cryptoStatus.textContent = e.message;
+      M.text(cryptoStatus, ToySPNMessages.error(e));
       cryptoStatus.className = 'status bad';
     }
   });
 
   $('#btn-sample').addEventListener('click', ()=>{
+    if (composing) return;
+    S = ToySPN.DEFAULT_S.slice();
+    P = ToySPN.DEFAULT_P.slice();
+    makeSBoxInputs(S);
+    makePLayerInputs(P);
+    onSBoxChange();
+    onPLayerChange();
     ptEl.value = '1234';
     mkeyEl.value = 'C0DE';
     roundsEl.value = 8;
-    stepsEl.innerHTML = '';
-    cryptoStatus.textContent = 'サンプルを読み込みました';
+    ctEl.value = '';
+    invalidate();
+    stepsEl.replaceChildren();
+    M.text(cryptoStatus, 'サンプルを読み込みました');
     cryptoStatus.className = 'status';
   });
 
@@ -555,70 +692,46 @@
   const avStatus = $('#avalanche-status');
   const canvas = $('#chart');
   const summary = $('#avalanche-summary');
+  [roundsEl, mkeyEl].forEach(input => input.addEventListener('input', () => invalidate()));
+  [ptEl, ctEl].forEach(input => input.addEventListener('input', () => invalidate('crypto')));
+  trialsEl.addEventListener('input', () => invalidate('analysis'));
 
   const analyzeAvalancheResult = (avg, hist, trials) => {
-    const deviation = Math.abs(avg - 8.0);
-    let verdict, verdictClass, analysis, suggestions;
-
-    // Calculate distribution metrics
+    // These describe this sample only; they are not cryptographic grades.
     const centerCount = hist[7] + hist[8] + hist[9];
     const centerPct = (centerCount / trials) * 100;
-
-    if (deviation < 0.5 && centerPct > 50) {
-      verdict = '優秀';
-      verdictClass = 'excellent';
-      analysis = 'なだれ効果が理想的です。入力1ビットの変化が出力の約半分に影響を及ぼしており、良好な拡散性を示しています。';
-      suggestions = [
-        '現在のS-BoxとP層の組み合わせは暗号学的に良好です',
-        'この設定を保存して、他の設定と比較してみましょう',
-        'さらにラウンド数を増やすと、より安定した拡散が得られます'
-      ];
-    } else if (deviation < 1.0 && centerPct > 40) {
-      verdict = '良好';
-      verdictClass = 'good';
-      analysis = 'なだれ効果は許容範囲内です。実用暗号には不十分ですが、教育目的としては十分な拡散性を示しています。';
-      suggestions = [
-        'ラウンド数を増やすと、より理想値に近づきます',
-        'P層の設計を見直し、より遠距離のビット混合を試してみましょう',
-        'S-Boxをランダム生成して、異なる結果を観察してみましょう'
-      ];
-    } else if (deviation < 2.0) {
-      verdict = '要改善';
-      verdictClass = 'fair';
-      analysis = 'なだれ効果が不十分です。拡散性に偏りがあり、暗号学的強度が低い可能性があります。';
-      suggestions = [
-        'ラウンド数が少なすぎる可能性があります（推奨: 8ラウンド以上）',
-        'P層が恒等置換に近い場合、ビットが十分に混ざりません',
-        'S-Boxの設計を見直し、より非線形性の高いものを試しましょう'
-      ];
-    } else {
-      verdict = '不合格';
-      verdictClass = 'poor';
-      analysis = 'なだれ効果が著しく不足しています。このままでは暗号として機能しません。設定を根本的に見直す必要があります。';
-      suggestions = [
-        'S-BoxまたはP層が全単射でない可能性があります（検証ボタンで確認）',
-        'ラウンド数が1〜2の場合、拡散が全く不十分です',
-        'デフォルト設定に戻して、基本的な動作を確認しましょう',
-        'P層が恒等置換（i→i）になっていないか確認してください'
-      ];
-    }
-
-    return { verdict, verdictClass, analysis, suggestions };
+    return {
+      verdict: ToySPNMessages.ja.measured,
+      verdictClass: 'measured',
+      analysis: '7〜9ビットが反転した試行は{0}/{1}回（{2}%）です。',
+      values: [centerCount, trials, centerPct.toFixed(1)],
+      suggestions: ToySPNMessages.ja.measurementHints
+    };
   };
 
   avBtn.addEventListener('click', ()=>{
     try{
-      const { rks } = collectParams();
-      const t = Math.max(10, Math.min(2000, parseInt(trialsEl.value||'200',10)));
-      avStatus.textContent = '実行中...';
-      setTimeout(()=>{
-        const { hist, avg } = ToySPNAnalysis.avalancheTrials(t, S, P, rks);
+      const { rks, R, mk } = collectParams();
+      const t = readInteger(trialsEl, 10, 2000, 'invalidTrials');
+      const savedS = S.slice(), savedP = P.slice();
+      clearAnalysis();
+      const version = runVersion;
+      avBtn.disabled = true;
+      $('#analysis').setAttribute('aria-busy', 'true');
+      M.text(avStatus, '実行中...');
+      pendingAnalysis = setTimeout(()=>{
+        if (version !== runVersion) return;
+        try {
+        const { hist, avg } = ToySPNAnalysis.avalancheTrials(t, savedS, savedP, rks);
+        lastHistogram = hist.slice();
         ToySPNAnalysis.drawHistogram(canvas, hist);
-        summary.textContent = `試行回数=${t}\n平均反転ビット数=${avg.toFixed(3)} (理想値 ~ 8.0)`;
+        M.text(summary, '試行回数={0}\n平均反転ビット数={1} / 16\nラウンド数={2}、鍵={3}\nS={4}\nP={5}',
+          t, avg.toFixed(3), R, ToySPN.numToHex16(mk),
+          savedS.map(n => n.toString(16).toUpperCase()).join(' '), savedP.join(' '));
 
         // Populate histogram data table
         const tbody = $('#histogram-tbody');
-        tbody.innerHTML = '';
+        tbody.replaceChildren();
         let hasData = false;
         for (let i = 0; i < hist.length; i++){
           if (hist[i] > 0) hasData = true;
@@ -626,56 +739,61 @@
           const tr = document.createElement('tr');
 
           const td1 = document.createElement('td');
-          td1.textContent = String(i);
+          M.text(td1, String(i));
           const td2 = document.createElement('td');
-          td2.textContent = String(hist[i]);
+          M.text(td2, String(hist[i]));
           const td3 = document.createElement('td');
-          td3.textContent = `${pct}%`;
+          M.text(td3, `${pct}%`);
 
           tr.appendChild(td1);
           tr.appendChild(td2);
           tr.appendChild(td3);
           tbody.appendChild(tr);
         }
-        $('#histogram-table').style.display = hasData ? 'block' : 'none';
+        $('#histogram-table').hidden = !hasData;
 
         // Show expert hint
-        const { verdict, verdictClass, analysis, suggestions } = analyzeAvalancheResult(avg, hist, t);
+        const { verdict, verdictClass, analysis, values, suggestions } = analyzeAvalancheResult(avg, hist, t);
         const expertHint = $('#expert-hint');
         const hintContent = $('#hint-content');
 
-        hintContent.innerHTML = '';
+        hintContent.replaceChildren();
 
         const section1 = document.createElement('div');
         section1.className = 'hint-section';
         const h4_1 = document.createElement('h4');
-        h4_1.textContent = '総合評価';
+        M.text(h4_1, '測定値');
         const p1 = document.createElement('p');
         const span1 = document.createElement('span');
         span1.className = `hint-verdict ${verdictClass}`;
-        span1.textContent = verdict;
+        M.text(span1, verdict);
         p1.appendChild(span1);
-        p1.appendChild(document.createTextNode(` 平均反転ビット数: ${avg.toFixed(3)} / 16.0 ビット`));
+        const average = document.createElement('span');
+        M.text(average, ' 平均反転ビット数: {0} / 16.0 ビット', avg.toFixed(3));
+        p1.appendChild(average);
         section1.appendChild(h4_1);
         section1.appendChild(p1);
 
         const section2 = document.createElement('div');
         section2.className = 'hint-section';
         const h4_2 = document.createElement('h4');
-        h4_2.textContent = '分析';
+        M.text(h4_2, '分布と測定の限界');
         const p2 = document.createElement('p');
-        p2.textContent = analysis;
+        M.text(p2, analysis, ...values);
+        const limit = document.createElement('p');
+        M.text(limit, M.ja.measurementLimit);
         section2.appendChild(h4_2);
         section2.appendChild(p2);
+        section2.appendChild(limit);
 
         const section3 = document.createElement('div');
         section3.className = 'hint-section';
         const h4_3 = document.createElement('h4');
-        h4_3.textContent = '改善のための提案';
+        M.text(h4_3, '比較するときの注意');
         const ul = document.createElement('ul');
         suggestions.forEach(s => {
           const li = document.createElement('li');
-          li.textContent = s;
+          M.text(li, s);
           ul.appendChild(li);
         });
         section3.appendChild(h4_3);
@@ -684,31 +802,60 @@
         hintContent.appendChild(section1);
         hintContent.appendChild(section2);
         hintContent.appendChild(section3);
-        expertHint.style.display = 'block';
+        expertHint.hidden = false;
 
-        avStatus.textContent = '完了 ✅';
+        M.text(avStatus, '完了 ✅');
         avStatus.className = 'status ok';
+        } catch (e) {
+          clearAnalysis();
+          M.text(avStatus, ToySPNMessages.error(e));
+          avStatus.className = 'status bad';
+        } finally {
+          pendingAnalysis = null;
+          avBtn.disabled = false;
+          $('#analysis').removeAttribute('aria-busy');
+        }
       }, 10);
     }catch(e){
-      avStatus.textContent = e.message;
+      M.text(avStatus, ToySPNMessages.error(e));
       avStatus.className = 'status bad';
     }
   });
 
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => {
+      if (lastHistogram && !$('#analysis').hidden) ToySPNAnalysis.drawHistogram(canvas, lastHistogram);
+    }).observe(canvas);
+  }
+
   // --- Accordion for Learn section ---
-  $$('.accordion-header').forEach(btn => {
+  $$('.accordion-header').forEach((btn, i) => {
+    const content = btn.nextElementSibling;
+    content.id = 'learn-' + i;
+    content.hidden = true;
+    btn.setAttribute('aria-controls', content.id);
+    btn.setAttribute('aria-expanded', 'false');
     btn.addEventListener('click', () => {
       const item = btn.parentElement;
       const wasActive = item.classList.contains('active');
 
       // Close all accordions
-      $$('.accordion-item').forEach(i => i.classList.remove('active'));
+      $$('.accordion-item').forEach(item => {
+        item.classList.remove('active');
+        item.querySelector('.accordion-header').setAttribute('aria-expanded', 'false');
+        item.querySelector('.accordion-content').hidden = true;
+      });
 
       // Open clicked one if it wasn't active
       if (!wasActive) {
         item.classList.add('active');
+        btn.setAttribute('aria-expanded', 'true');
+        content.hidden = false;
       }
     });
   });
 
+  M.registerStatic(document.documentElement);
+  $('#language-toggle').addEventListener('click', () => M.saveLanguage(M.language === 'ja' ? 'en' : 'ja'));
+  M.setLanguage(M.initialLanguage());
 })();

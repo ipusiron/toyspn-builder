@@ -29,6 +29,7 @@ ToySPN Builder
 │   ├── 乱数生成
 │   ├── アバランシェテスト
 │   └── 統計処理
+├── messages.js    (日英辞書、表示言語、文言更新)
 └── ui.js          (UIコントローラー)
     ├── イベントハンドラ
     ├── DOM操作（XSS対策済み）
@@ -37,10 +38,10 @@ ToySPN Builder
 
 ### 設計原則
 
-1. **依存ゼロ**: 純粋なHTML/CSS/JavaScriptのみで実装
-2. **IIFE パターン**: グローバルスコープ汚染を防止
-3. **関数型スタイル**: イミュータブルなデータフロー
-4. **セキュリティファースト**: XSS対策、入力バリデーション
+1. 依存ゼロ: 純粋なHTML/CSS/JavaScriptのみで実装
+2. IIFEパターン：公開APIだけをToySPN、ToySPNAnalysis、ToySPNMessagesとして公開
+3. 状態の分離：UIは編集可能な状態を持ち、解析開始時に配列をコピー
+4. セキュリティファースト: XSS対策、入力バリデーション
 
 ---
 
@@ -48,7 +49,7 @@ ToySPN Builder
 
 ### 1. ビット置換（P層）の実装
 
-**特徴**: 高速なビットレベル操作
+特徴: 高速なビットレベル操作
 
 ```javascript
 const permute16 = (x, P) => {
@@ -61,18 +62,18 @@ const permute16 = (x, P) => {
 };
 ```
 
-**工夫点**:
+工夫点:
 - ビットマスクとシフト演算による高速処理
 - ループ展開不要（16回固定で十分高速）
 - 配列ルックアップによる柔軟な置換定義
 
-**計算量**: O(16) = O(1) - 定数時間
+計算量：16回固定のループです。暗号実装としての定数時間性を保証するものではありません。
 
 ---
 
 ### 2. S-Box（ニブル置換）の実装
 
-**特徴**: 4つのニブルを並列的に処理
+特徴：4つのニブルを順番に処理
 
 ```javascript
 const subNib16 = (x, S) => {
@@ -85,22 +86,23 @@ const subNib16 = (x, S) => {
 };
 ```
 
-**工夫点**:
-- ニブル単位（4bit）でのSIMD風処理
-- テーブルルックアップによる非線形変換
-- ビット演算のみで分岐なし（分岐予測ミスなし）
+工夫点:
+- 4ビットごとに表を参照するループ
+- S-Boxの内容に応じた変換（全単射でも線形の場合あり）
+- JavaScriptエンジンやメモリーアクセスの時間差は評価対象外
 
-**拡張性**:
-- S-Boxサイズを変えれば8bit、12bitにも対応可能
-- 現状は4bit（16要素）でメモリ効率とセキュリティのバランス
+拡張性:
+- 現在のブロックは16ビット、S-Boxは4ビット固定
+- サイズを変えるにはビット演算、UI、検証、テストを含む設計変更が必要
 
 ---
 
 ### 3. 鍵スケジュール
 
-**特徴**: 軽量ながら適度な鍵拡散
+特徴：16ビットの左回転と固定定数のXOR
 
 ```javascript
+// 数値範囲の検証後に実行する導出部分の抜粋
 const deriveRoundKeys = (masterKey, rounds) => {
   const keys = [];
   let k = masterKey & 0xFFFF;
@@ -113,27 +115,34 @@ const deriveRoundKeys = (masterKey, rounds) => {
 };
 ```
 
-**工夫点**:
-- **可変回転量**: ラウンドごとに1〜5ビット回転（パターン回避）
-- **ラウンド定数**: 16個の定数を循環利用（関連鍵攻撃への対策）
-- **左回転**: ビットの循環で情報損失なし
+工夫点:
+- 可変回転量：ラウンド番号rは0から始まり、回転量は(r % 5) + 1
+- ラウンド定数：固定の16要素を使用。定数列には重複あり
+- 左回転：ビットの循環で情報損失なし
 
-**数学的性質**:
+数学的性質:
 ```
 k_r = ROT(k_{r-1}, (r mod 5) + 1) ⊕ RC[r]
 ```
-- 各ラウンド鍵は前ラウンドの非線形な関数
-- RC配列により各ラウンドの独立性を確保
+- 回転はGF(2)上の線形変換、定数XORを含む全体はアフィン変換
+- RC配列はラウンド鍵の独立性や関連鍵攻撃への耐性を保証しない
+- 実装は鍵0〜65535、ラウンド数1〜16の整数を検証してから導出
+
+鍵C0DEの8個のラウンド鍵は次のとおりです。
+
+```text
+365C 4747 FCD5 9F99 C694 923B D6D9 012F
+```
 
 ---
 
 ### 4. 全単射（Bijection）検証
 
-**特徴**: 高速な一意性チェック
+特徴: 高速な一意性チェック
 
 ```javascript
 const isBijection = (arr, size) => {
-  if (arr.length !== size) return false;
+  if (!Array.isArray(arr) || arr.length !== size) return false;
   const seen = new Set(arr);           // O(n)
   if (seen.size !== size) return false; // 重複チェック
   for (let i = 0; i < size; i++){
@@ -144,12 +153,12 @@ const isBijection = (arr, size) => {
 };
 ```
 
-**工夫点**:
-- **Setによる重複検出**: O(n) で高速
-- **3段階チェック**: 長さ → 重複 → 範囲
-- **早期リターン**: 最初の不正で即座に終了
+工夫点:
+- Setによる重複検出: O(n) で高速
+- 3段階チェック: 長さ → 重複 → 範囲
+- 早期リターン: 最初の不正で即座に終了
 
-**数学的意味**:
+数学的意味:
 - 全単射 ⇔ すべての入力が異なる出力に一意対応
 - 可逆性の必要十分条件
 
@@ -157,94 +166,83 @@ const isBijection = (arr, size) => {
 
 ## セキュリティ実装
 
-### 1. XSS対策 - innerHTML完全排除
+### 1. XSS対策
 
-**問題**: `innerHTML` は任意のHTMLを注入可能
+動的な値はHTMLとして解釈させず、textContentで描画します。
+要素はcreateElementやcreateElementNSで作り、内容のクリアにはreplaceChildrenを使います。
 
-**解決策**: すべての動的コンテンツを `textContent` と `createElement` で構築
-
-#### Before（脆弱）:
-```javascript
-div.innerHTML = `<h4>ラウンド ${s.round}</h4>`;  // XSS可能
-```
-
-#### After（安全）:
 ```javascript
 const h4 = document.createElement('h4');
-h4.textContent = `ラウンド ${s.round}`;  // エスケープ自動
+ToySPNMessages.text(h4, 'ラウンド {0}', s.round);
 div.appendChild(h4);
 ```
 
-**適用箇所**:
-- ステップ表示（暗号化/復号）
-- 検証結果表示
-- ヒストグラムテーブル
-- 専門家ヒント
-- SVGマーカー生成
+翻訳関数も最終的にtextContentへ代入します。
+辞書の文字列からHTMLを生成することはありません。
+
+適用箇所：
+
+- 暗号化と復号のステップ
+- 設定検証の結果
+- ヒストグラム表
+- 観測値の解説
+- SVGのラベル
 
 ---
 
-### 2. 入力バリデーション - 多層防御
+### 2. 入力バリデーション
 
-**戦略**: 型チェック → 文字フィルタ → 長さ制限 → 数値検証
+型と文字列全体を検証し、入力を別の値へ補正して実行することはありません。
 
 ```javascript
 const clampHex16 = (s) => {
-  // 第1層: 型チェック
-  if (typeof s !== 'string') s = '';
-
-  // 第2層: 文字フィルタ（ホワイトリスト）
-  s = s.trim().replace(/[^0-9a-fA-F]/g, '').toUpperCase();
-
-  // 第3層: 長さ制限
-  if (s.length === 0) s = '0000';
-  if (s.length > 4) s = s.slice(-4);
-
-  // 第4層: パディング
+  if (typeof s !== 'string' || !/^[0-9a-fA-F]{1,4}$/.test(s.trim())) fail('invalidHex');
+  s = s.trim().toUpperCase();
   return s.padStart(4, '0');
-};
-
-const hex16ToNum = (h) => {
-  const clamped = clampHex16(h);
-  const num = parseInt(clamped, 16);
-
-  // 第5層: 数値検証（NaN, Infinity対策）
-  return (Number.isFinite(num) ? num : 0) & 0xFFFF;
 };
 ```
 
-**防御対象**:
-- SQLインジェクション: N/A（バックエンドなし）
-- XSS: textContent使用
-- 整数オーバーフロー: `& 0xFFFF` でマスク
-- 不正な数値: `Number.isFinite()` チェック
+関数名はclampHex16ですが、範囲外の値を切り詰める関数ではありません。
+正常な入力だけを大文字4桁に正規化します。
+
+| 入力 | 扱い |
+| --- | --- |
+| `abc` | `0ABC` |
+| `0` | `0000` |
+| 空欄、`12G4`、`0x12` | invalidHex |
+| `10000` | invalidHex |
+| ラウンド数`1.5`、`1e1`、`17` | invalidRounds |
+| 試行回数`9`、`2001` | invalidTrials |
+
+整数は数字のみの文字列を検証し、Number.isSafeIntegerと範囲チェックを行います。
+S-Boxは0〜F、P層は0〜15がそれぞれ1回ずつ現れる配列である必要があります。
+個々の要素の入力エラーはaria-invalidで示し、重複を含む表全体のエラーはステータスで通知します。
+
+coreの低レベル変換関数は、検証済みの表と16ビット値を受け取る前提です。
+UIとavalancheTrialsでその境界を検証します。
 
 ---
 
 ### 3. Content Security Policy (CSP)
 
-**設定内容**:
 ```html
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'self';
-               script-src 'self';
-               style-src 'self' 'unsafe-inline';
-               img-src 'self' data: https:;
-               connect-src 'self';
-               frame-ancestors 'none';" />
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none'; script-src 'self'; style-src 'self';
+  img-src 'self' data:; connect-src 'none'; base-uri 'none';
+  form-action 'none'; object-src 'none';
+">
+<meta name="referrer" content="no-referrer">
 ```
 
-**効果**:
-- `script-src 'self'`: インラインスクリプト完全禁止
-- `frame-ancestors 'none'`: クリックジャッキング防止
-- `default-src 'self'`: すべてのリソースを同一オリジンに制限
+- スクリプトとCSS：同一オリジンのファイルだけを許可
+- 画像：同一オリジンとdata URLだけを許可
+- 接続、フォーム送信、base要素、プラグイン：禁止
+- インラインスクリプト、eval、インラインstyle属性：使用しない
 
-**追加ヘッダー**:
-```html
-<meta http-equiv="X-Content-Type-Options" content="nosniff" />
-<meta http-equiv="X-Frame-Options" content="DENY" />
-<meta name="referrer" content="no-referrer" />
-```
+frame-ancestorsはmetaでは無視されます。
+X-Frame-OptionsとX-Content-Type-OptionsもHTTPヘッダー専用です。
+本ツールはこれらによる埋め込み拒否やMIME制御を保証しません。
+根拠は[W3C CSP仕様](https://www.w3.org/TR/CSP/#directive-frame-ancestors)と[セキュリティ文書](SECURITY.md)を参照してください。
 
 ---
 
@@ -252,9 +250,9 @@ const hex16ToNum = (h) => {
 
 ### 1. アバランシェテスト - 効率的な統計処理
 
-**課題**: 1000回の暗号化 × 16ビット反転カウント = 計算量大
+1試行で2回暗号化します。1000試行なら2000回の暗号化を実行します。
 
-**最適化**:
+以下は入力検証とエラー処理を省略した計算部分です。
 
 ```javascript
 const avalancheTrials = (trials, S, P, roundKeys) => {
@@ -266,11 +264,11 @@ const avalancheTrials = (trials, S, P, roundKeys) => {
     const bit = 1 << (rand16() % 16);
     const pt2 = pt ^ bit;
 
-    // 2回の暗号化（並列化不可）
+    // この実装では2回の暗号化を順番に実行
     const c1 = ToySPN.encryptBlock(pt, S, P, roundKeys);
     const c2 = ToySPN.encryptBlock(pt2, S, P, roundKeys);
 
-    // ハミング距離計算（最適化済み）
+    // 2つの暗号文のハミング距離を計算
     const diff = hamming16(c1 ^ c2);
     hist[diff] += 1;  // O(1) 更新
     sum += diff;
@@ -280,7 +278,7 @@ const avalancheTrials = (trials, S, P, roundKeys) => {
 };
 ```
 
-**ハミング距離の高速計算**:
+ハミング距離の高速計算:
 ```javascript
 const hamming16 = (x) => {
   x &= 0xFFFF;
@@ -293,156 +291,131 @@ const hamming16 = (x) => {
 };
 ```
 
-**代替手法との比較**:
-- **Population Count (POPCNT)**: CPU命令だが、JSから直接使えない
-- **ルックアップテーブル**: メモリ vs 速度のトレードオフ（今回は不要）
-- **現在の実装**: シンプルで十分高速（16回ループ）
+代替手法との比較:
+- Population Count (POPCNT): CPU命令だが、JSから直接使えない
+- ルックアップテーブル: メモリ vs 速度のトレードオフ（今回は不要）
+- 現在の実装：最大16回のループ。処理時間の比較測定は行っていない
 
 ---
 
-### 2. SVG可視化 - DOM操作の最小化
+### 2. SVG可視化の更新
 
-**戦略**: バッチ更新で再描画を抑制
+S-BoxとP層の図はそれぞれ16本の対応線を持ちます。
+更新時には点、ラベル、線のグループをクリアして作り直します。
+表が不正な場合は線を描かず、誤った対応を示さないようにします。
 
 ```javascript
-const drawSBoxVisualization = (S) => {
-  // 1. 既存要素をクリア（一度だけ）
-  inputDots.innerHTML = '';
-  outputDots.innerHTML = '';
-  arrows.innerHTML = '';
-
-  // 2. DocumentFragmentで一括構築
-  const fragment = document.createDocumentFragment();
-
-  for (let i = 0; i < 16; i++){
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', inputX);
-    line.setAttribute('y1', inputY + 5);
-    line.setAttribute('x2', outputX);
-    line.setAttribute('y2', outputY - 5);
-    line.setAttribute('class', 'viz-arrow');
-
-    fragment.appendChild(line);  // メモリ上で構築
-  }
-
-  // 3. 一度だけDOMに追加（リフロー1回）
-  arrows.appendChild(fragment);
-};
+inputDots.replaceChildren();
+outputDots.replaceChildren();
+arrows.replaceChildren();
+if (!ToySPN.isBijection(S, 16)) return;
 ```
 
-**効果**:
-- リフロー: 16回 → 1回（16倍高速化）
-- 描画コスト: O(n²) → O(n)
+矢印先端のdefsは各SVGに1つだけ作り、再利用します。
+S-Boxにはarrowhead、P層にはarrowhead-pという異なるIDを使います。
+繰り返し編集しても、同じIDの定義が蓄積しない構成です。
+
+DocumentFragmentによる一括更新や、描画速度が何倍になるという保証はありません。
+ブラウザーの描画性能とは別に、要素数とIDの一意性を検証します。
 
 ---
 
-### 3. 暗号学的乱数生成 - Web Crypto API
+### 3. 乱数生成とWeb Crypto API
 
-**実装**:
+ランダムな鍵、S-Box、P層、解析の平文と反転位置は、coreのrandom16を通じて生成します。
+
 ```javascript
-const rand16 = () => {
-  if (window.crypto && crypto.getRandomValues){
-    const buf = new Uint16Array(1);
-    crypto.getRandomValues(buf);  // CSPRNG
-    return buf[0];
+const random16 = () => {
+  if (!global.crypto || typeof global.crypto.getRandomValues !== 'function') fail('randomUnavailable');
+  try {
+    return global.crypto.getRandomValues(new Uint16Array(1))[0];
+  } catch (_) {
+    return fail('randomUnavailable');
   }
-  // フォールバック（非推奨）
-  return (Math.random()*0x10000) & 0xFFFF;
 };
 ```
 
-**工夫点**:
-- **crypto.getRandomValues()**: ハードウェアRNG or OSレベルのエントロピー
-- **Math.random() フォールバック**: 古いブラウザー対応（セキュアではない）
-- **Uint16Array**: 型付き配列で高速
+Web Cryptoが利用できない場合はエラーとして扱います。
+Math.randomへの代替は行いません。
+SとPは生成が完了してからUIの状態に反映するため、途中で乱数取得が失敗しても表は一部分だけ変更されません。
 
-**品質比較**:
-- `Math.random()`: 疑似乱数（PRNG）、周期あり
-- `crypto.getRandomValues()`: 暗号学的擬似乱数（CSPRNG）、予測不可能
+解析では65536通りの乱数を16で割った余りで、反転位置を選びます。
+65536は16で割り切れるため、この操作で位置の確率に偏りは生じません。
+ただし、乱数源の品質が暗号そのものの安全性を保証するわけではありません。
 
 ---
 
 ## UI/UX設計の工夫
 
-### 1. リアルタイム検証 - debounceなしの即時フィードバック
+### 1. 即時検証と結果の失効
 
-**設計判断**: 入力規模が小さい（16要素）ため、debounce不要
+SとPはUIのIIFE内で管理します。
+表の編集では、入力を読み直し、全単射性と図を更新します。
 
 ```javascript
 const onSBoxChange = () => {
-  S = readSBoxFromInputs();
-
-  // 即座に検証
+  invalidate();
+  S = readSBox();
   const ok = ToySPN.isBijection(S, 16);
-  sboxStatus.textContent = ok ? '✅ 全単射' : '❌ 重複あり';
-  sboxStatus.className = ok ? 'status ok' : 'status bad';
-
-  // 逆S-Box即座に更新
-  const invS = ToySPN.invertSBox(S);
-
-  // SVG可視化を即座に更新
+  M.text(sStatus, ok ? '全単射 ✅' : '全単射ではありません ❌');
+  sStatus.className = 'status ' + (ok ? 'ok' : 'bad');
   drawSBoxVisualization(S);
 };
-
-// すべての入力にリスナー設定
-sboxInputs.forEach(inp => {
-  inp.addEventListener('input', onSBoxChange);
-});
 ```
 
-**利点**:
-- タイピング中に即座にエラー検出
-- 学習ツールとして直感的
-- 計算コスト: O(16) = 許容範囲
+逆Sと逆Pを生成するのは復号時です。
+入力中の不正な表から逆写像を作ることはありません。
 
----
+| 変更した値 | 消す結果 | 保持するもの |
+| --- | --- | --- |
+| S、P、鍵、ラウンド数 | 暗号化手順、検証結果、解析 | 平文と暗号文の入力欄 |
+| 平文、暗号文 | 暗号化手順、検証結果 | 設定に対する解析 |
+| 試行回数 | 解析 | 暗号化手順 |
+| サンプル | すべての計算結果 | 試行回数 |
+| 表示言語 | なし | 入力とすべての数値結果 |
 
-### 2. 専門家ヒント - 4段階評価アルゴリズム
+IME変換中は実行を拒否します。
+数値入力の変更だけでなく、リセット、ランダム生成、恒等表への変更も同じ失効処理を通ります。
 
-**実装**:
+### 2. 観測値と解析の状態管理
+
+解析開始時にS、P、鍵、ラウンド数、試行回数を固定します。
+SとPはコピーし、実行ボタンを無効化してから遅延処理を予約します。
+入力が変わった場合は予約を取り消し、実行世代の番号でも古い処理を拒否します。
+
+計算本体はメインスレッドで同期実行します。
+計算が始まった後に途中で中断する機能はありません。
+setTimeoutの内側にもtry/catch/finallyを置き、乱数の取得失敗を画面に通知してボタンを有効に戻します。
+
+結果には次を表示します。
+
+- 0〜16ビットの17区分の回数と割合
+- 平均反転ビット数
+- 7〜9ビットの試行数と割合
+- S、P、鍵、ラウンド数、試行回数
+- 安全性やSACを判定していないという注記
+
 ```javascript
-const analyzeAvalancheResult = (avg, hist, trials) => {
-  const deviation = Math.abs(avg - 8.0);  // 理想値からの偏差
-  const centerCount = hist[7] + hist[8] + hist[9];
-  const centerPct = (centerCount / trials) * 100;
-
-  let verdict, verdictClass;
-
-  if (deviation < 0.5 && centerPct > 50) {
-    verdict = '優秀';
-    verdictClass = 'excellent';
-    analysis = '理想的な拡散性能を示しています...';
-  } else if (deviation < 1.0 && centerPct > 40) {
-    verdict = '良好';
-    verdictClass = 'good';
-    analysis = '良好な拡散性能です...';
-  } else if (deviation < 2.0 && centerPct > 25) {
-    verdict = '要改善';
-    verdictClass = 'fair';
-    analysis = '拡散性能が不十分です...';
-  } else {
-    verdict = '不合格';
-    verdictClass = 'poor';
-    analysis = '拡散がほとんど起きていません...';
-  }
-
-  return { verdict, verdictClass, analysis, suggestions };
-};
+const centerCount = hist[7] + hist[8] + hist[9];
+const centerPct = centerCount / trials * 100;
 ```
 
-**評価基準**:
-| 評価 | 平均偏差 | 中央集中率 | 意味 |
-|------|----------|------------|------|
-| 優秀 | < 0.5 | > 50% | AESレベル |
-| 良好 | < 1.0 | > 40% | 実用的 |
-| 要改善 | < 2.0 | > 25% | 弱い |
-| 不合格 | ≥ 2.0 | ≤ 25% | ヒル暗号レベル |
+centerPctはこの標本での割合であり、合否判定の閾値ではありません。
+UIは暗号強度を採点しません。
+
+言語切替は登録済みの文言と属性を翻訳し、数値を計算し直しません。
+辞書の保存対象は言語設定だけで、入力や解析結果をlocalStorageへ保存しません。
+保存へのアクセスが例外になっても、現在のページ上での切替は動作します。
+
+Canvasは表示幅とdevicePixelRatioに合わせて描画し、文字は12pxを保ちます。
+幅が狭い場合は横軸の目盛りを2刻みにし、全17区分の正確な数値は表に表示します。
+ResizeObserverは保存したヒストグラムを再描画するだけで、ランダム解析を再実行しません。
 
 ---
 
 ### 3. SVG可視化 - 直線矢印による明快な対応表現
 
-**設計判断**: 曲線ではなく直線を採用
+設計判断: 曲線ではなく直線を採用
 
 ```javascript
 // 直線（採用）
@@ -453,17 +426,13 @@ line.setAttribute('x2', outputX);
 line.setAttribute('y2', outputY - 5);
 ```
 
-**理由**:
-- **視認性**: 交差が少なく、対応関係が明確
-- **パフォーマンス**: 曲線（path）より描画が高速
-- **教育効果**: 恒等写像時に垂直線 = 非線形変換なしが一目瞭然
+各入力と出力の対応を線で示します。
+恒等写像では垂直線になります。
+線の交差は表の内容によって変わり、曲線より高速であるという測定結果はありません。
 
-**代替案（不採用）**:
-```javascript
-// ベジェ曲線（複雑、重い）
-const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-path.setAttribute('d', `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`);
-```
+図は横方向へスクロールでき、入力欄やページ全体は画面幅に合わせて折り返します。
+タブは矢印キーとHome/End、補足説明はEnterとEscapeで操作できます。
+非表示のパネルにはhidden属性を使い、CSSでも確実に非表示にします。
 
 ---
 
@@ -471,95 +440,101 @@ path.setAttribute('d', `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`);
 
 ### 1. SPNの可逆性の証明
 
-**定理**: S, P が全単射 ⇒ SPN は可逆
+定理: S, P が全単射 ⇒ SPN は可逆
 
-**証明**:
+証明:
 ```
-暗号化: C = SPN(P) = AddRoundKey(Permute(SubNib(P, S), P), k)
-                    = (P_layer(S_layer(P)) ⊕ k)
+x: 入力状態、S: S層、P: P層、k: 固定したラウンド鍵
+1ラウンドの暗号化: y = P(S(x)) ⊕ k
+逆変換: x' = S⁻¹(P⁻¹(y ⊕ k))
 
-復号: P' = SPN⁻¹(C) = SubNib⁻¹(Permute⁻¹(C ⊕ k, P⁻¹), S⁻¹)
-                     = S⁻¹(P⁻¹(C ⊕ k))
-
-P' = P を示す:
-  P' = S⁻¹(P⁻¹((P(S(P)) ⊕ k) ⊕ k))
-     = S⁻¹(P⁻¹(P(S(P))))      (XOR の自己逆元性)
-     = S⁻¹(S(P))               (P⁻¹ ∘ P = id)
-     = P                       (S⁻¹ ∘ S = id)
+x' = x を示す:
+  x' = S⁻¹(P⁻¹((P(S(x)) ⊕ k) ⊕ k))
+     = S⁻¹(P⁻¹(P(S(x))))      (XORの自己逆性)
+     = S⁻¹(S(x))               (P⁻¹ ∘ P = id)
+     = x                       (S⁻¹ ∘ S = id)
 ```
 
-**実装での対応**:
+各ラウンドが可逆なので、ラウンド順も逆にたどれば全体を復号できます。
+
+実装での対応:
 - `invertSBox(S)`: S⁻¹ を計算
 - `invertPermutation(P)`: P⁻¹ を計算
 - `isBijection()`: 全単射性を検証
 
 ---
 
-### 2. アバランシェ効果の理論値
+### 2. アバランシェ効果の確率モデル
 
-**理論**: 理想的なランダム置換では、1ビット変化で平均 n/2 ビット反転
+各出力ビットが独立に確率1/2で反転すると仮定すれば、反転ビット数は二項分布になります。
 
-**確率モデル**:
-```
-X = 入力の1ビット反転
-Y = 出力の反転ビット数
+```text
 Y ~ Binomial(n=16, p=0.5)
-
-E[Y] = np = 16 × 0.5 = 8
-Var[Y] = np(1-p) = 16 × 0.5 × 0.5 = 4
-σ = 2
+E[Y] = 16 × 0.5 = 8
+Var[Y] = 16 × 0.5 × 0.5 = 4
+標準偏差 = 2
 ```
 
-**実測との比較**:
-- デフォルト設定（8ラウンド）: avg ≈ 7.8〜8.2 ✅
-- S-Boxなし: avg ≈ 2〜4 ❌（線形のため拡散不足）
-- ラウンド1: avg ≈ 3〜5 ❌（ラウンド不足）
+これは比較のためのモデルです。
+全単射である暗号では異なる入力が同じ暗号文になることはないため、反転数0は生じません。
+厳密なランダム置換の出力差の分布は、0を含む上記の二項分布と同じではありません。
+
+また、平均8という値から独立性やSACを導くことはできません。
+SACは、各入力ビットを反転したときに各出力ビットが半分の入力で反転する条件です。
+本ツールはその入力ビットと出力ビットの組ごとの確率を計測しません。
+
+確認用の例：
+
+- 恒等S-Box：有効なPと固定鍵なら、どの入力差も反転数1
+- 線形S = [0,E,D,3,B,5,6,8,7,9,A,4,C,2,1,F]とデフォルトP：全16入力ビット差の平均は1〜4ラウンドで3、9、3、1
+- デフォルト設定のランダム試行：結果は標本に依存し、特定の範囲への一致を保証しない
 
 ---
 
-### 3. 鍵スケジュールの安全性
+### 3. 鍵スケジュールの限界
 
-**目標**: 各ラウンド鍵の独立性
-
-**手法**:
-```
-k_r = ROT(k_{r-1}, rot(r)) ⊕ RC[r]
+```text
+k_r = ROT(k_(r-1), rot(r)) ⊕ RC[r]
 ```
 
-**安全性根拠**:
-1. **回転**: 線形だが情報損失なし
-2. **XOR with RC**: 各ラウンドに異なる定数を混合
-3. **可変回転量**: パターン化を防止
+回転と固定値のXORからなる導出は、GF(2)上のアフィン変換です。
+ラウンド定数には重複があり、ラウンド鍵が独立になる保証もありません。
+ただし、定数の重複だけでラウンド鍵が同一になるとは限りません。
 
-**弱点（教育用ツールのため許容）**:
-- マスター鍵が短い（16bit）
-- 高度な関連鍵攻撃には脆弱
-- 実用暗号（AES）では S-Box や MixColumns を使用
+16ビットのマスター鍵は65,536通りしかありません。
+入力全体も65,536通りの小さな教材であり、実際の情報保護には利用できません。
+
+[AESの仕様（FIPS 197）](https://csrc.nist.gov/pubs/fips/197/final)は別の構成を定めています。
+AESの鍵展開ではRotWord、SubWord、Rconを使います。
+MixColumnsは暗号化ラウンドの変換であり、鍵展開の処理ではありません。
 
 ---
 
 ### 4. Fisher-Yates シャッフル（ランダム生成）
 
-**実装**:
+実装は16要素固定です。
+
 ```javascript
-const generateRandomPermutation = (n) => {
-  const arr = Array.from({length: n}, (_, i) => i);
-  for (let i = n - 1; i > 0; i--){
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];  // スワップ
+const shuffledTable = () => {
+  const table = Array.from({ length: 16 }, (_, i) => i);
+  for (let i = 15; i > 0; i--) {
+    const limit = 65536 - (65536 % (i + 1));
+    let value;
+    do { value = random16(); } while (value >= limit);
+    const j = value % (i + 1);
+    [table[i], table[j]] = [table[j], table[i]];
   }
-  return arr;
+  return table;
 };
 ```
 
-**特性**:
-- **一様分布**: すべての順列が等確率
-- **計算量**: O(n)
-- **全単射保証**: スワップ操作により必ず全単射
+余りを取る前に、65536を選択肢の数で割った余りの区間を捨てます。
+そのため、一様な16ビット乱数を仮定すれば、各jが等確率になります。
+たとえば選択肢が15個なら、65535を引いた場合に再取得します。
 
-**数学的証明**:
-- n! 通りの順列がすべて 1/n! の確率で生成される
-- 帰納法により証明可能
+交換だけで表を作るため、全単射性を保持します。
+各段階で独立な一様乱数を使うという仮定のもとで、16!個の順列は等確率です。
+生成回数は棄却が起きるかどうかで変わるため、取得回数が固定とは限りません。
 
 ---
 
@@ -567,23 +542,23 @@ const generateRandomPermutation = (n) => {
 
 ### コード規約
 
-1. **命名規則**:
+1. 命名規則:
    - 関数: `camelCase`
    - 定数: `UPPER_SNAKE_CASE`
    - プライベート: 先頭アンダースコア不要（IIFE内部で隠蔽）
 
-2. **コメント**:
+2. コメント:
    - JSDoc形式で全公開関数に記述
    - アルゴリズムの「なぜ」を説明
 
-3. **セキュリティ**:
+3. セキュリティ:
    - `innerHTML` 使用禁止
    - すべての入力をバリデーション
    - 型チェックを徹底
 
 ### テスト方針
 
-**手動テスト項目**:
+手動テスト項目:
 - [ ] S-Box全単射チェック（重複入力時）
 - [ ] P層全単射チェック（範囲外入力時）
 - [ ] 暗号化→復号で元に戻る
@@ -591,50 +566,63 @@ const generateRandomPermutation = (n) => {
 - [ ] SVG可視化の正確性
 - [ ] ブラウザーコンソールエラーなし
 
-**自動テスト（将来の拡張）**:
-```javascript
-// 例: Mocha/Chai によるユニットテスト
-describe('ToySPN.isBijection', () => {
-  it('should return true for valid bijection', () => {
-    const S = [1,2,3,0];
-    expect(ToySPN.isBijection(S, 4)).to.be.true;
-  });
+自動テストはNode.js標準のnode:testとassert/strictを使用します。
+パッケージのインストールは不要です。
 
-  it('should return false for duplicate', () => {
-    const S = [1,1,2,3];
-    expect(ToySPN.isBijection(S, 4)).to.be.false;
-  });
+```sh
+npm test
+```
+
+```javascript
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const ToySPN = require('./js/core.js');
+test('bijection', () => {
+  assert.equal(ToySPN.isBijection([1, 2, 3, 0], 4), true);
+  assert.equal(ToySPN.isBijection([1, 1, 2, 3], 4), false);
 });
 ```
+
+- 既知の暗号文とラウンド鍵、デフォルト設定の全65,536平文往復
+- 不正な入力、乱数の不在と取得失敗、シャッフルの棄却
+- 固定した試行値でのヒストグラムと平均、教育上の反例
+- 日英辞書、READMEの見出しと例、相対リンク、整形、CSP
+- ブラウザーでは入力変更、言語切替、未確定入力、キーボード、狭い画面を確認
 
 ---
 
 ## 参考文献
 
-1. **SPN構造**:
+1. SPN構造:
    - Joan Daemen, Vincent Rijmen. "The Design of Rijndael: AES - The Advanced Encryption Standard" (2002)
 
-2. **アバランシェ効果**:
+2. アバランシェ効果:
    - Webster, A.F., Tavares, S.E. "On the design of S-boxes" (CRYPTO 1985)
 
-3. **暗号学的乱数**:
+3. 暗号学的乱数:
    - W3C. "Web Cryptography API" - https://www.w3.org/TR/WebCryptoAPI/
 
-4. **XSS対策**:
+4. XSS対策:
    - OWASP. "Cross Site Scripting Prevention Cheat Sheet"
 
-5. **Fisher-Yates シャッフル**:
+5. Fisher-Yates シャッフル:
    - Knuth, D.E. "The Art of Computer Programming, Volume 2" (Algorithm P)
 
 ---
 
-## 変更履歴
+## 実装の確認方法
 
-| バージョン | 日付 | 変更内容 |
-|-----------|------|---------|
-| 1.0.0 | 2025-01-XX | 初版リリース |
-| 1.1.0 | 2025-01-XX | XSS対策強化（innerHTML削除） |
-| 1.2.0 | 2025-01-XX | CSP追加、セキュリティヘッダー設定 |
+コード例は説明用の抜粋を含みます。
+実行する正確な処理はjs/内のソースを参照してください。
+
+```sh
+git log --oneline
+npm test
+```
+
+変更後は、Node.jsのテストに加え、HTTPとfile://の画面を確認します。
+GitHub Actionsのpushとpull_request両方が成功してから、通常マージで公開します。
+mainへの直接pushや、テストの期待値を変更して失敗を隠す運用は行いません。
 
 ---
 

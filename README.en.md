@@ -35,7 +35,7 @@ Try it directly in your browser.
 >*An avalanche test with the miniature SPN*
 >
 >![Encryption steps](assets/en/screenshot3.png)
->*Transforming plaintext 1234 into ciphertext FBC6*
+>*Transforming plaintext 1234 into ciphertext FBC6, with 16-bit values and key XOR*
 
 ---
 
@@ -56,6 +56,16 @@ Try it directly in your browser.
 Plaintext, ciphertext, and key accept 1–4 hexadecimal digits.
 Uppercase and lowercase are accepted, and leading zeros may be omitted.
 Blank input, invalid characters, and out-of-range integers produce errors.
+
+Step details can be expanded by round. Only the first round to be processed is open initially.
+Input and output remain visible when a round is collapsed. Use “Expand all” or “Collapse all” to control every round.
+Select “Show 16-bit values too” to add binary values grouped in fours alongside the hexadecimal values.
+Bit 15 is on the left and bit 0 on the right. For example, 1234 is `0001 0010 0011 0100`.
+
+Each round's “Key XOR calculation” shows the value before XOR, the round key actually used, and the value after XOR.
+Round 1 of the default encryption sample gives `3C6B ⊕ 365C = 0A37`.
+Decryption uses the round keys from last to first. Expanding rounds, toggling binary values, and switching language do not recompute results.
+Language switching also preserves which rounds are open. The binary-display choice is kept within the page but returns to off on reload.
 
 ### Experimental usage
 

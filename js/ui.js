@@ -22,6 +22,7 @@
   const showCryptoState = state => {
     cryptoState = state;
     $('#steps-empty').hidden = state === 'complete';
+    $('#step-controls').hidden = state !== 'complete';
     if (state !== 'complete') M.text($('#steps-empty'), emptyMessages[state === 'initial' ? 'initialCrypto' : state]);
   };
   const showAnalysisState = state => {
@@ -587,95 +588,91 @@
     return { R, mk, rks };
   };
 
-  const renderEncryptSteps = (steps) => {
+  const binaryValue = hex => {
+    const bits = document.createElement('span');
+    bits.className = 'step-binary';
+    bits.textContent = parseInt(hex, 16).toString(2).padStart(16, '0').match(/.{4}/g).join(' ');
+    bits.hidden = !$('#steps-bits').checked;
+    return bits;
+  };
+  $('#steps-bits').addEventListener('change', () => {
+    $$('#steps .step-binary').forEach(el => { el.hidden = !$('#steps-bits').checked; });
+  });
+  const renderSteps = (steps, roundKeys, decrypt = false) => {
     stepsEl.replaceChildren();
-    steps.forEach(s => {
-      const div = document.createElement('div');
-      div.className = 'step-round';
-
-      const h4 = document.createElement('h4');
-      M.text(h4, 'ラウンド {0}', s.round);
-      div.appendChild(h4);
-
-      const createRow = (label, value, showArrow = false) => {
+    steps.forEach((s, index) => {
+      const detail = document.createElement('details');
+      detail.className = 'step-round';
+      detail.open = index === 0;
+      const summary = document.createElement('summary');
+      const title = document.createElement('span');
+      M.text(title, decrypt ? 'ラウンド {0} (逆順)' : 'ラウンド {0}', s.round);
+      const values = document.createElement('span');
+      values.className = 'step-summary-values';
+      M.text(values, '入力 {0} → 出力 {1}', s.before, decrypt ? s.afterS : s.afterK);
+      summary.append(title, values);
+      detail.appendChild(summary);
+      const body = document.createElement('div');
+      body.className = 'step-body';
+      if (decrypt && index === 0) {
+        const note = document.createElement('p');
+        note.className = 'note';
+        M.text(note, '復号では最後のラウンド鍵から逆順に使います。');
+        body.appendChild(note);
+      }
+      const rows = decrypt
+        ? [['入力', s.before], ['鍵加算後 (⊕)', s.afterK], ['逆P層後', s.afterP], ['逆S-Box後', s.afterS]]
+        : [['入力', s.before], ['S-Box後', s.afterS], ['P層後', s.afterP], ['鍵加算後 (⊕)', s.afterK]];
+      rows.forEach(([label, value]) => {
         const row = document.createElement('div');
         row.className = 'step-row';
         const labelSpan = document.createElement('span');
         labelSpan.className = 'step-label';
         M.text(labelSpan, label);
-        row.appendChild(labelSpan);
-        if (showArrow) {
-          const arrow = document.createElement('span');
-          arrow.className = 'step-arrow';
-          M.text(arrow, '↓');
-          row.appendChild(arrow);
-        }
         const valueSpan = document.createElement('span');
         valueSpan.className = 'step-value';
         M.text(valueSpan, value);
-        row.appendChild(valueSpan);
-        return row;
-      };
-
-      div.appendChild(createRow('入力', s.before));
-      div.appendChild(createRow('S-Box後', s.afterS, true));
-      div.appendChild(createRow('P層後', s.afterP, true));
-      div.appendChild(createRow('鍵加算後 (⊕)', s.afterK, true));
-
-      stepsEl.appendChild(div);
+        const valueGroup = document.createElement('span');
+        valueGroup.className = 'step-number';
+        valueGroup.append(valueSpan, binaryValue(value));
+        row.append(labelSpan, valueGroup);
+        body.appendChild(row);
+      });
+      const heading = document.createElement('h4');
+      M.text(heading, '鍵XORの計算');
+      const equation = document.createElement('div');
+      equation.className = 'xor-equation';
+      const operands = [
+        ['XOR前', decrypt ? s.before : s.afterP, ''],
+        ['ラウンド鍵 {0}', ToySPN.numToHex16(roundKeys[s.round - 1]), '⊕'],
+        ['XOR後', s.afterK, '=']
+      ];
+      operands.forEach(([label, hex, operator]) => {
+        const term = document.createElement('div');
+        term.className = 'xor-term';
+        const name = document.createElement('span');
+        name.className = 'step-label';
+        M.text(name, label, s.round);
+        const value = document.createElement('span');
+        value.className = 'xor-value';
+        value.textContent = hex;
+        const sign = document.createElement('span');
+        sign.className = 'xor-operator';
+        sign.textContent = operator;
+        term.append(sign, name, value, binaryValue(hex));
+        equation.appendChild(term);
+      });
+      body.append(heading, equation);
+      detail.appendChild(body);
+      stepsEl.appendChild(detail);
     });
-    if (steps.length === 0) {
-      const div = document.createElement('div');
-      div.className = 'step-round';
-      M.text(div, '表示するステップがありません');
-      stepsEl.appendChild(div);
-    }
   };
-
-  const renderDecryptSteps = (steps) => {
-    stepsEl.replaceChildren();
-    steps.forEach(s => {
-      const div = document.createElement('div');
-      div.className = 'step-round';
-
-      const h4 = document.createElement('h4');
-      M.text(h4, 'ラウンド {0} (逆順)', s.round);
-      div.appendChild(h4);
-
-      const createRow = (label, value, showArrow = false) => {
-        const row = document.createElement('div');
-        row.className = 'step-row';
-        const labelSpan = document.createElement('span');
-        labelSpan.className = 'step-label';
-        M.text(labelSpan, label);
-        row.appendChild(labelSpan);
-        if (showArrow) {
-          const arrow = document.createElement('span');
-          arrow.className = 'step-arrow';
-          M.text(arrow, '↓');
-          row.appendChild(arrow);
-        }
-        const valueSpan = document.createElement('span');
-        valueSpan.className = 'step-value';
-        M.text(valueSpan, value);
-        row.appendChild(valueSpan);
-        return row;
-      };
-
-      div.appendChild(createRow('入力', s.before));
-      div.appendChild(createRow('鍵加算後 (⊕)', s.afterK, true));
-      div.appendChild(createRow('逆P層後', s.afterP, true));
-      div.appendChild(createRow('逆S-Box後', s.afterS, true));
-
-      stepsEl.appendChild(div);
-    });
-    if (steps.length === 0) {
-      const div = document.createElement('div');
-      div.className = 'step-round';
-      M.text(div, '表示するステップがありません');
-      stepsEl.appendChild(div);
-    }
-  };
+  $('#steps-expand').addEventListener('click', () => {
+    $$('#steps details').forEach(detail => { detail.open = true; });
+  });
+  $('#steps-collapse').addEventListener('click', () => {
+    $$('#steps details').forEach(detail => { detail.open = false; });
+  });
 
   $('#btn-encrypt').addEventListener('click', ()=>{
     try{
@@ -684,7 +681,7 @@
       const steps = [];
       const ct = ToySPN.encryptBlock(pt, S, P, rks, steps);
       ctEl.value = ToySPN.numToHex16(ct);
-      renderEncryptSteps(steps);
+      renderSteps(steps, rks);
       showCryptoState('complete');
       M.text(cryptoStatus, '暗号化完了 ✅');
       cryptoStatus.className = 'status ok';
@@ -705,7 +702,7 @@
       const steps = [];
       const pt = ToySPN.decryptBlock(ct, invS, invP, rks, steps);
       ptEl.value = ToySPN.numToHex16(pt);
-      renderDecryptSteps(steps);
+      renderSteps(steps, rks, true);
       showCryptoState('complete');
       M.text(cryptoStatus, '復号完了 ✅');
       cryptoStatus.className = 'status ok';

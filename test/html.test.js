@@ -62,3 +62,21 @@ test('empty-state guidance, current settings and sample effects are explicit',()
   assert.match(ui,/showAnalysisState\('complete'\)/);
   assert.match(ui,/showCryptoState\('complete'\)/);
 });
+
+test('round disclosure controls use native details with a visible input/output summary',()=>{
+  assert.match(html,/id="step-controls"[^>]*hidden/);
+  for(const id of ['steps-expand','steps-collapse']) assert.match(html,new RegExp('id="'+id+'"[^>]*aria-controls="steps"'));
+  assert.match(ui,/createElement\('details'\)/);
+  assert.match(ui,/detail.open = index === 0/);
+  assert.match(ui,/入力 \{0\} → 出力 \{1\}/);
+  assert.doesNotMatch(css,/max-height:420px/);
+});
+
+test('bit display is optional and XOR operands use the executed round key',()=>{
+  assert.match(html,/id="steps-bits" type="checkbox"[^>]*aria-describedby="bits-note"/);
+  assert.match(html,/左端がビット15、右端がビット0/);
+  assert.match(ui,/padStart\(16, '0'\)/);
+  assert.match(ui,/roundKeys\[s.round - 1\]/);
+  assert.match(ui,/decrypt \? s.before : s.afterP/);
+  assert.match(ui,/renderSteps\(steps, rks, true\)/);
+});

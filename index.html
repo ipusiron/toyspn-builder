@@ -3,15 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';" />
-  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-  <meta http-equiv="X-Frame-Options" content="DENY" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;
+    connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none';" />
   <meta name="referrer" content="no-referrer" />
   <title>ToySPN Builder</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css" />
   <meta name="description" content="Build-and-run a tiny SPN block cipher (S-box → linear permutation → add-round-key) with step-by-step visualization and avalanche tests." />
 </head>
 <body>
+  <noscript>このツールの実行にはJavaScriptが必要です。</noscript>
   <header class="app-header">
     <h1>ToySPN Builder - SPN体験ミニツール</h1>
     <p class="tagline">S-Box・P層・鍵加算で学ぶ現代ブロック暗号の仕組み</p>
@@ -28,9 +30,9 @@
     <!-- Designer -->
     <section id="designer" class="panel active">
       <div class="card">
-        <h2>S-Box（4bit，全単射）<span class="help-icon">?<span class="tooltip">4ビット入力を4ビットの値に置換する表です。<br>0〜Fを重複なく並べてください。全単射でも非線形とは限りません。</span></span></h2>
+        <h2>S-Box（4bit，全単射）<button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">4ビット入力を4ビットの値に置換する表です。<br>0〜Fを重複なく並べてください。全単射でも非線形とは限りません。</span></button></h2>
         <p class="help">0x0〜0xF の置換を入力（重複不可）。変更すると逆S-Boxは自動生成されます。<br>
-        <span style="font-size:13px; color:var(--accent); font-weight:600;">💡 全単射 = すべての入力が異なる出力に1対1対応（重複なし・欠落なし）</span></p>
+        <span class="bijection-note">💡 全単射 = すべての入力が異なる出力に1対1対応（重複なし・欠落なし）</span></p>
         <div id="sbox-grid" class="grid16"></div>
         <div class="row">
           <button id="sbox-reset" class="btn">デフォルトに戻す</button>
@@ -39,7 +41,7 @@
           <span id="sbox-status" class="status"></span>
         </div>
 
-        <div class="visualization-section">
+        <div class="visualization-section" tabindex="0" role="region" aria-label="対応関係の図（横スクロール可能）">
           <h3>対応関係の可視化</h3>
           <svg id="sbox-viz" class="sbox-visualization" viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
             <!-- Input dots -->
@@ -56,7 +58,7 @@
       </div>
 
       <div class="card">
-        <h2>P層（ビット置換，16bit）<span class="help-icon">?<span class="tooltip">16ビットのビット位置を入れ替える線形変換層です。<br>各ビットiをP[i]番目の位置に移動させます。<br>S-Boxで生じた変化をブロック全体に拡散させる役割があります。</span></span></h2>
+        <h2>P層（ビット置換，16bit）<button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">16ビットのビット位置を入れ替える線形変換層です。<br>各ビットiをP[i]番目の位置に移動させます。<br>S-Boxで生じた変化をブロック全体に拡散させる役割があります。</span></button></h2>
         <p class="help">ビット i（0..15）を P[i] 番目へ。全単射である必要があります。</p>
         <div id="player-grid" class="grid16"></div>
         <div class="row">
@@ -66,7 +68,7 @@
           <span id="player-status" class="status"></span>
         </div>
 
-        <div class="visualization-section">
+        <div class="visualization-section" tabindex="0" role="region" aria-label="対応関係の図（横スクロール可能）">
           <h3>対応関係の可視化</h3>
           <svg id="player-viz" class="sbox-visualization" viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
             <!-- Input dots -->
@@ -85,15 +87,15 @@
       <div class="card">
         <h2>ラウンド設定</h2>
         <div class="config-group-inline">
-          <label>ラウンド数</label>
-          <span class="help-icon">?<span class="tooltip">S-Box、P層、鍵XORを繰り返す回数です。<br>1〜16で指定します。回数を増やしても拡散や安全性の改善は保証されません。</span></span>
+          <label for="rounds">ラウンド数</label>
+          <button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">S-Box、P層、鍵XORを繰り返す回数です。<br>1〜16で指定します。回数を増やしても拡散や安全性の改善は保証されません。</span></button>
           <input id="rounds" type="number" min="1" max="16" value="8" placeholder="8" class="input-short" />
           <button id="rounds-min" class="btn btn-warning btn-compact">最小1</button>
           <button id="rounds-max" class="btn btn-compact">最大16</button>
         </div>
         <div class="config-group-inline">
-          <label>マスター鍵 (16進数 16-bit)</label>
-          <span class="help-icon">?<span class="tooltip">暗号化・復号に使う秘密鍵です。<br>16進数4桁（16ビット）で指定します。<br>この鍵から各ラウンドで使う鍵を自動生成します。</span></span>
+          <label for="master-key">マスター鍵 (16進数 16-bit)</label>
+          <button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">暗号化・復号に使う秘密鍵です。<br>16進数4桁（16ビット）で指定します。<br>この鍵から各ラウンドで使う鍵を自動生成します。</span></button>
           <input id="master-key" type="text" value="C0DE" maxlength="4" placeholder="例: C0DE" class="input-medium" />
           <button id="key-random" class="btn">ランダム生成</button>
         </div>
@@ -103,7 +105,7 @@
         <button id="validate" class="btn primary validate-btn">🔍 設定を検証</button>
       </div>
 
-      <div id="validate-result" class="validate-result card" style="display:none;">
+      <div id="validate-result" class="validate-result card" hidden>
         <h4>検証結果</h4>
         <div id="validate-status" class="validate-details"></div>
       </div>
@@ -138,7 +140,7 @@
     <!-- Analysis -->
     <section id="analysis" class="panel">
       <div class="card">
-        <h2>なだれ効果テスト（Avalanche Effect）<span class="help-icon">?<span class="tooltip">入力の1ビットを変えたとき、出力が平均して何ビット変化するかを測定します。<br>理想的には約50%（8ビット）が変化するべきで、これが暗号の拡散性能を示します。<br>※アバランシェ効果とも呼ばれます。</span></span></h2>
+        <h2>なだれ効果テスト（Avalanche Effect）<button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">入力の1ビットを変えたとき、出力が平均して何ビット変化するかを測定します。<br>理想的には約50%（8ビット）が変化するべきで、これが暗号の拡散性能を示します。<br>※アバランシェ効果とも呼ばれます。</span></button></h2>
         <div class="row">
           <label>試行回数
             <input id="trials" type="number" min="10" max="2000" value="200" placeholder="200" />
@@ -147,12 +149,12 @@
           <span id="avalanche-status" class="status"></span>
         </div>
         <div class="row">
-          <canvas id="chart" width="680" height="260" aria-label="Histogram"></canvas>
+          <canvas id="chart" width="680" height="260" role="img" aria-label="反転ビット数のヒストグラム。正確な数値は下の表に表示します。"></canvas>
         </div>
         <div class="row">
           <pre id="avalanche-summary" class="mono"></pre>
         </div>
-        <div id="histogram-table" class="histogram-data" style="display:none;">
+        <div id="histogram-table" class="histogram-data" hidden>
           <table>
             <thead>
               <tr>
@@ -166,7 +168,7 @@
         </div>
       </div>
 
-      <div id="expert-hint" class="card expert-hint" style="display:none;">
+      <div id="expert-hint" class="card expert-hint" hidden>
         <h3>💡 結果の読み方</h3>
         <div id="hint-content" class="hint-content"></div>
       </div>
@@ -341,14 +343,14 @@
           </div>
         </div>
 
-        <p class="note" style="margin-top:16px;">💡 各項目をクリックして詳細を展開してください。</p>
+        <p class="note learn-note">💡 各項目をクリックして詳細を展開してください。</p>
       </div>
     </section>
   </main>
 
   <footer>
     <div class="footer">
-      🔗 GitHubリポジトリはこちら（ <a href="https://github.com/ipusiron/toyspn-builder" target="_blank">ipusiron/toyspn-builder</a> ）
+      🔗 GitHubリポジトリはこちら（ <a href="https://github.com/ipusiron/toyspn-builder" target="_blank" rel="noopener noreferrer">ipusiron/toyspn-builder</a> ）
     </div>
   </footer>
 

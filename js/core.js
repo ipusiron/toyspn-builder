@@ -33,6 +33,17 @@
       return fail('randomUnavailable');
     }
   };
+  const shuffledTable = () => {
+    const table = Array.from({ length: 16 }, (_, i) => i);
+    for (let i = 15; i > 0; i--) {
+      const limit = 65536 - (65536 % (i + 1));
+      let value;
+      do { value = random16(); } while (value >= limit);
+      const j = value % (i + 1);
+      [table[i], table[j]] = [table[j], table[i]];
+    }
+    return table;
+  };
 
   // =========================================================
   // ユーティリティ関数
@@ -334,7 +345,7 @@
    */
   global.ToySPN = {
     // ユーティリティ
-    clampHex16, hex16ToNum, numToHex16, parseInteger, random16,
+    clampHex16, hex16ToNum, numToHex16, parseInteger, random16, shuffledTable,
     // 逆写像・検証
     invertPermutation, invertSBox, isBijection,
     // コア変換

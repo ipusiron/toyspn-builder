@@ -18,8 +18,8 @@
     $('#chart').getContext('2d').clearRect(0, 0, $('#chart').width, $('#chart').height);
     $('#avalanche-summary').textContent = '';
     $('#histogram-tbody').replaceChildren();
-    $('#histogram-table').style.display = 'none';
-    $('#expert-hint').style.display = 'none';
+    $('#histogram-table').hidden = true;
+    $('#expert-hint').hidden = true;
     $('#hint-content').replaceChildren();
     $('#avalanche-status').textContent = '';
     $('#avalanche-status').className = 'status';
@@ -31,7 +31,7 @@
     const status = $('#crypto-status');
     if (status.textContent) status.textContent = ToySPNMessages.ja.changed;
     status.className = 'status';
-    $('#validate-result').style.display = 'none';
+    $('#validate-result').hidden = true;
     $('#validate-status').replaceChildren();
   };
   const ensureCommitted = () => {
@@ -47,19 +47,69 @@
   });
 
   // Tabs
-  $$('.tab').forEach(btn=>{
+  $('.tabs').setAttribute('role', 'tablist');
+  $('.tabs').setAttribute('aria-label', '操作画面');
+  $$('.tab').forEach((btn, index)=>{
+    btn.id = 'tab-' + btn.dataset.tab;
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-controls', btn.dataset.tab);
+    btn.setAttribute('aria-selected', String(index === 0));
+    btn.tabIndex = index === 0 ? 0 : -1;
+    const panel = $('#' + btn.dataset.tab);
+    panel.setAttribute('role', 'tabpanel');
+    panel.setAttribute('aria-labelledby', btn.id);
+    panel.hidden = index !== 0;
+    btn.addEventListener('keydown', event => {
+      const tabs = $$('.tab');
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+      if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = tabs.length - 1;
+      if (next !== undefined) {
+        event.preventDefault(); tabs[next].click(); tabs[next].focus();
+      }
+    });
     btn.addEventListener('click', ()=>{
-      $$('.tab').forEach(b=>b.classList.remove('active'));
-      $$('.panel').forEach(p=>p.classList.remove('active'));
+      $$('.tab').forEach(b=>{
+        b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); b.tabIndex = -1;
+      });
+      $$('.panel').forEach(p=>{ p.classList.remove('active'); p.hidden = true; });
       btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true'); btn.tabIndex = 0;
       $('#'+btn.dataset.tab).classList.add('active');
+      $('#'+btn.dataset.tab).hidden = false;
     });
   });
+  $$('.help-icon').forEach((button, i) => {
+    button.setAttribute('aria-expanded', 'false');
+    const content = button.querySelector('.tooltip');
+    content.id = 'help-' + i;
+    button.setAttribute('aria-controls', content.id);
+    content.hidden = true;
+    button.addEventListener('click', () => {
+      const open = button.getAttribute('aria-expanded') !== 'true';
+      button.setAttribute('aria-expanded', String(open)); content.hidden = !open;
+    });
+    button.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        button.setAttribute('aria-expanded', 'false'); content.hidden = true;
+      }
+    });
+  });
+  document.addEventListener('click', event => {
+    $$('.help-icon').forEach(button => {
+      if (!button.contains(event.target)) {
+        button.setAttribute('aria-expanded', 'false'); button.querySelector('.tooltip').hidden = true;
+      }
+    });
+  });
+  $$('.status, #validate-status').forEach(el => el.setAttribute('aria-live', 'polite'));
 
   // --- S-Box grid ---
   const sGrid = $('#sbox-grid');
   const makeSBoxInputs = (S) => {
-    sGrid.innerHTML = '';
+    sGrid.replaceChildren();
     for (let i = 0; i < 16; i++){
       const div = document.createElement('div');
       div.className = 'grid16-item';
@@ -67,9 +117,13 @@
       const label = document.createElement('label');
       label.className = 'grid-label';
       label.textContent = i.toString(16).toUpperCase();
+      label.htmlFor = 'sbox-' + i;
 
       const inp = document.createElement('input');
       inp.type = 'text';
+      inp.id = 'sbox-' + i;
+      inp.setAttribute('aria-label', 'S-Box 入力' + i.toString(16).toUpperCase() + 'の出力');
+      inp.autocomplete = 'off';
       inp.maxLength = 1;
       inp.value = S[i].toString(16).toUpperCase();
       inp.dataset.idx = String(i);
@@ -97,13 +151,14 @@
     const arrows = $('#arrows');
 
     // Clear previous
-    inputDots.innerHTML = '';
-    outputDots.innerHTML = '';
-    arrows.innerHTML = '';
+    inputDots.replaceChildren();
+    outputDots.replaceChildren();
+    arrows.replaceChildren();
 
     if (!ToySPN.isBijection(S, 16)) return;
 
-    // Add arrowhead marker
+    // Reuse one definition per SVG.
+    if (!svg.querySelector('defs')) {
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
     marker.setAttribute('id', 'arrowhead');
@@ -118,6 +173,7 @@
     marker.appendChild(polygon);
     defs.appendChild(marker);
     svg.insertBefore(defs, svg.firstChild);
+    }
 
     const startX = 60;
     const spacing = 46;
@@ -170,6 +226,7 @@
       line.setAttribute('x2', outputX);
       line.setAttribute('y2', outputY - 5);
       line.setAttribute('class', 'viz-arrow');
+      line.setAttribute('marker-end', 'url(#arrowhead)');
 
       // Add title for hover
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
@@ -195,14 +252,12 @@
   });
 
   $('#sbox-random').addEventListener('click', ()=>{
-    // Fisher-Yates shuffle to maintain bijection
-    S = Array.from({length: 16}, (_, i) => i);
-    for (let i = 15; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [S[i], S[j]] = [S[j], S[i]];
-    }
+    try {
+    ensureCommitted();
+    S = ToySPN.shuffledTable();
     makeSBoxInputs(S);
     onSBoxChange();
+    } catch (e) { sStatus.textContent = ToySPNMessages.error(e); }
   });
 
   $('#sbox-identity').addEventListener('click', ()=>{
@@ -215,7 +270,7 @@
   // --- P-layer grid ---
   const pGrid = $('#player-grid');
   const makePLayerInputs = (P) => {
-    pGrid.innerHTML = '';
+    pGrid.replaceChildren();
     for (let i = 0; i < 16; i++){
       const div = document.createElement('div');
       div.className = 'grid16-item';
@@ -223,9 +278,12 @@
       const label = document.createElement('label');
       label.className = 'grid-label';
       label.textContent = 'b' + i;
+      label.htmlFor = 'player-' + i;
 
       const inp = document.createElement('input');
       inp.type = 'number';
+      inp.id = 'player-' + i;
+      inp.setAttribute('aria-label', '入力ビット' + i + 'の移動先');
       inp.min = 0; inp.max = 15;
       inp.value = P[i];
       inp.dataset.idx = String(i);
@@ -252,13 +310,14 @@
     const arrows = $('#player-arrows');
 
     // Clear previous
-    inputDots.innerHTML = '';
-    outputDots.innerHTML = '';
-    arrows.innerHTML = '';
+    inputDots.replaceChildren();
+    outputDots.replaceChildren();
+    arrows.replaceChildren();
 
     if (!ToySPN.isBijection(P, 16)) return;
 
-    // Add arrowhead marker
+    // Reuse one definition per SVG.
+    if (!svg.querySelector('defs')) {
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
     marker.setAttribute('id', 'arrowhead-p');
@@ -273,6 +332,7 @@
     marker.appendChild(polygon);
     defs.appendChild(marker);
     svg.insertBefore(defs, svg.firstChild);
+    }
 
     const startX = 60;
     const spacing = 46;
@@ -351,14 +411,12 @@
   });
 
   $('#player-random').addEventListener('click', ()=>{
-    // Fisher-Yates shuffle to maintain bijection
-    P = Array.from({length: 16}, (_, i) => i);
-    for (let i = 15; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [P[i], P[j]] = [P[j], P[i]];
-    }
+    try {
+    ensureCommitted();
+    P = ToySPN.shuffledTable();
     makePLayerInputs(P);
     onPLayerChange();
+    } catch (e) { pStatus.textContent = ToySPNMessages.error(e); }
   });
 
   $('#player-identity').addEventListener('click', ()=>{
@@ -404,7 +462,7 @@
       mkeyEl.value = ToySPN.numToHex16(ToySPN.random16());
       invalidate();
     } catch (e) {
-      validateResult.style.display = 'block';
+      validateResult.hidden = false;
       validateStatus.textContent = ToySPNMessages.error(e);
     }
   });
@@ -423,7 +481,7 @@
     const pClass = okP ? 'ok' : 'ng';
     const overall = okS && okP;
 
-    validateStatus.innerHTML = '';
+    validateStatus.replaceChildren();
 
     const createDetailRow = (labelText, valueText, valueClass = '', isTotal = false) => {
       const row = document.createElement('div');
@@ -456,9 +514,9 @@
     validateStatus.appendChild(createDetailRow('ラウンド鍵1', ToySPN.numToHex16(keys[0])));
     validateStatus.appendChild(createDetailRow('総合判定', overall ? '✅ 暗号化可能' : '❌ 設定エラー', overall ? 'ok' : 'ng', true));
 
-    validateResult.style.display = 'block';
+    validateResult.hidden = false;
     } catch (e) {
-      validateResult.style.display = 'block';
+      validateResult.hidden = false;
       validateStatus.textContent = ToySPNMessages.error(e);
     }
   });
@@ -484,7 +542,7 @@
   };
 
   const renderEncryptSteps = (steps) => {
-    stepsEl.innerHTML = '';
+    stepsEl.replaceChildren();
     steps.forEach(s => {
       const div = document.createElement('div');
       div.className = 'step-round';
@@ -529,7 +587,7 @@
   };
 
   const renderDecryptSteps = (steps) => {
-    stepsEl.innerHTML = '';
+    stepsEl.replaceChildren();
     steps.forEach(s => {
       const div = document.createElement('div');
       div.className = 'step-round';
@@ -620,7 +678,7 @@
     roundsEl.value = 8;
     ctEl.value = '';
     invalidate();
-    stepsEl.innerHTML = '';
+    stepsEl.replaceChildren();
     cryptoStatus.textContent = 'サンプルを読み込みました';
     cryptoStatus.className = 'status';
   });
@@ -669,7 +727,7 @@
 
         // Populate histogram data table
         const tbody = $('#histogram-tbody');
-        tbody.innerHTML = '';
+        tbody.replaceChildren();
         let hasData = false;
         for (let i = 0; i < hist.length; i++){
           if (hist[i] > 0) hasData = true;
@@ -688,14 +746,14 @@
           tr.appendChild(td3);
           tbody.appendChild(tr);
         }
-        $('#histogram-table').style.display = hasData ? 'block' : 'none';
+        $('#histogram-table').hidden = !hasData;
 
         // Show expert hint
         const { verdict, verdictClass, analysis, suggestions } = analyzeAvalancheResult(avg, hist, t);
         const expertHint = $('#expert-hint');
         const hintContent = $('#hint-content');
 
-        hintContent.innerHTML = '';
+        hintContent.replaceChildren();
 
         const section1 = document.createElement('div');
         section1.className = 'hint-section';
@@ -735,7 +793,7 @@
         hintContent.appendChild(section1);
         hintContent.appendChild(section2);
         hintContent.appendChild(section3);
-        expertHint.style.display = 'block';
+        expertHint.hidden = false;
 
         avStatus.textContent = '完了 ✅';
         avStatus.className = 'status ok';
@@ -756,17 +814,28 @@
   });
 
   // --- Accordion for Learn section ---
-  $$('.accordion-header').forEach(btn => {
+  $$('.accordion-header').forEach((btn, i) => {
+    const content = btn.nextElementSibling;
+    content.id = 'learn-' + i;
+    content.hidden = true;
+    btn.setAttribute('aria-controls', content.id);
+    btn.setAttribute('aria-expanded', 'false');
     btn.addEventListener('click', () => {
       const item = btn.parentElement;
       const wasActive = item.classList.contains('active');
 
       // Close all accordions
-      $$('.accordion-item').forEach(i => i.classList.remove('active'));
+      $$('.accordion-item').forEach(item => {
+        item.classList.remove('active');
+        item.querySelector('.accordion-header').setAttribute('aria-expanded', 'false');
+        item.querySelector('.accordion-content').hidden = true;
+      });
 
       // Open clicked one if it wasn't active
       if (!wasActive) {
         item.classList.add('active');
+        btn.setAttribute('aria-expanded', 'true');
+        content.hidden = false;
       }
     });
   });

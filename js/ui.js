@@ -10,8 +10,49 @@
   let runVersion = 0;
   let pendingAnalysis = null;
   let composing = false;
+  let cryptoState = 'initial';
+  let analysisState = 'initial';
+  const emptyMessages = {
+    initialCrypto: '暗号化または復号を実行すると、各ラウンドの計算過程を表示します。',
+    initialAnalysis: '実行すると、反転ビット数の分布と実行時の条件を表示します。',
+    changed: '入力や設定が変わりました。結果を表示するには再実行してください。',
+    error: '処理できませんでした。上のエラーを確認してから再実行してください。',
+    running: '解析中です。完了すると結果を表示します。'
+  };
+  const showCryptoState = state => {
+    cryptoState = state;
+    $('#steps-empty').hidden = state === 'complete';
+    if (state !== 'complete') M.text($('#steps-empty'), emptyMessages[state === 'initial' ? 'initialCrypto' : state]);
+  };
+  const showAnalysisState = state => {
+    analysisState = state;
+    $('#analysis-empty').hidden = state === 'complete';
+    $('#analysis-output').hidden = state !== 'complete';
+    if (state !== 'complete') M.text($('#analysis-empty'), emptyMessages[state === 'initial' ? 'initialAnalysis' : state]);
+  };
+  const renderCurrentSettings = () => {
+    // Read the controls, not cached S/P: mutation handlers may not have updated those yet.
+    const tableKind = (selector, defaults, radix) => {
+      const values = $$(selector).map(input => {
+        const raw = input.value.trim();
+        return (radix === 16 ? /^[0-9a-f]$/i : /^\d+$/).test(raw) ? parseInt(raw, radix) : NaN;
+      });
+      if (!ToySPN.isBijection(values, 16)) return '要修正';
+      if (values.every((v, i) => v === defaults[i])) return '標準';
+      return values.every((v, i) => v === i) ? '恒等' : 'カスタム';
+    };
+    const read = fn => { try { return fn(); } catch (_) { return '要修正'; } };
+    const values = {
+      rounds: read(() => ToySPN.parseInteger($('#rounds').value, 1, 16)),
+      key: read(() => ToySPN.numToHex16(ToySPN.hex16ToNum($('#master-key').value))),
+      sbox: tableKind('#sbox-grid input', ToySPN.DEFAULT_S, 16),
+      player: tableKind('#player-grid input', ToySPN.DEFAULT_P, 10)
+    };
+    $$('[data-setting]').forEach(el => M.text(el, composing ? '入力中' : values[el.dataset.setting]));
+  };
 
-  const clearAnalysis = () => {
+  const clearAnalysis = (state = analysisState === 'initial' ? 'initial' : 'changed') => {
+    showAnalysisState(state);
     lastHistogram = null;
     runVersion++;
     clearTimeout(pendingAnalysis);
@@ -28,9 +69,11 @@
     $('#avalanche-status').className = 'status';
   };
   const invalidate = (scope = 'all') => {
+    renderCurrentSettings();
     if (scope !== 'crypto') clearAnalysis();
     if (scope === 'analysis') return;
     $('#steps').replaceChildren();
+    showCryptoState(cryptoState === 'initial' ? 'initial' : 'changed');
     const status = $('#crypto-status');
     if (status.textContent) M.text(status, ToySPNMessages.ja.changed);
     status.className = 'status';
@@ -642,9 +685,12 @@
       const ct = ToySPN.encryptBlock(pt, S, P, rks, steps);
       ctEl.value = ToySPN.numToHex16(ct);
       renderEncryptSteps(steps);
+      showCryptoState('complete');
       M.text(cryptoStatus, '暗号化完了 ✅');
       cryptoStatus.className = 'status ok';
     }catch(e){
+      stepsEl.replaceChildren();
+      showCryptoState('error');
       M.text(cryptoStatus, ToySPNMessages.error(e));
       cryptoStatus.className = 'status bad';
     }
@@ -660,9 +706,12 @@
       const pt = ToySPN.decryptBlock(ct, invS, invP, rks, steps);
       ptEl.value = ToySPN.numToHex16(pt);
       renderDecryptSteps(steps);
+      showCryptoState('complete');
       M.text(cryptoStatus, '復号完了 ✅');
       cryptoStatus.className = 'status ok';
     }catch(e){
+      stepsEl.replaceChildren();
+      showCryptoState('error');
       M.text(cryptoStatus, ToySPNMessages.error(e));
       cryptoStatus.className = 'status bad';
     }
@@ -682,7 +731,9 @@
     ctEl.value = '';
     invalidate();
     stepsEl.replaceChildren();
-    M.text(cryptoStatus, 'サンプルを読み込みました');
+    showCryptoState('initial');
+    showAnalysisState('initial');
+    M.text(cryptoStatus, '標準サンプルを設定しました（S/Pは標準、平文1234・鍵C0DE・8ラウンド）。');
     cryptoStatus.className = 'status';
   });
 
@@ -714,7 +765,7 @@
       const { rks, R, mk } = collectParams();
       const t = readInteger(trialsEl, 10, 2000, 'invalidTrials');
       const savedS = S.slice(), savedP = P.slice();
-      clearAnalysis();
+      clearAnalysis('running');
       const version = runVersion;
       avBtn.disabled = true;
       $('#analysis').setAttribute('aria-busy', 'true');
@@ -724,6 +775,7 @@
         try {
         const { hist, avg } = ToySPNAnalysis.avalancheTrials(t, savedS, savedP, rks);
         lastHistogram = hist.slice();
+        showAnalysisState('complete');
         ToySPNAnalysis.drawHistogram(canvas, hist);
         M.text(summary, '試行回数={0}\n平均反転ビット数={1} / 16\nラウンド数={2}、鍵={3}\nS={4}\nP={5}',
           t, avg.toFixed(3), R, ToySPN.numToHex16(mk),
@@ -807,7 +859,7 @@
         M.text(avStatus, '完了 ✅');
         avStatus.className = 'status ok';
         } catch (e) {
-          clearAnalysis();
+          clearAnalysis('error');
           M.text(avStatus, ToySPNMessages.error(e));
           avStatus.className = 'status bad';
         } finally {
@@ -817,6 +869,7 @@
         }
       }, 10);
     }catch(e){
+      clearAnalysis('error');
       M.text(avStatus, ToySPNMessages.error(e));
       avStatus.className = 'status bad';
     }

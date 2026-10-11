@@ -71,6 +71,32 @@
       "The operation could not be completed. Check your input and browser capabilities."
   };
   const translations = {
+    "現在の設定（設計タブで変更）": "Current settings (change in Design)",
+    "ラウンド数：": "Rounds: ",
+    "鍵：": "Key: ",
+    "S-Box：": "S-box: ",
+    "P層：": "P-layer: ",
+    "標準": "Default",
+    "恒等": "Identity",
+    "カスタム": "Custom",
+    "要修正": "Needs correction",
+    "入力中": "Composing input",
+    "標準サンプル": "Default sample",
+    "標準サンプルはS/P・鍵・ラウンド数も標準設定に戻します。試行回数は変えません。":
+      "The default sample also resets S/P, the key, and rounds to their defaults. The trial count is kept.",
+    "標準サンプルを設定しました（S/Pは標準、平文1234・鍵C0DE・8ラウンド）。":
+      "Default sample loaded: default S/P, plaintext 1234, key C0DE, 8 rounds.",
+    "暗号化または復号を実行すると、各ラウンドの計算過程を表示します。":
+      "Encrypt or decrypt to see the operations in each round.",
+    "実行すると、反転ビット数の分布と実行時の条件を表示します。":
+      "Run the analysis to see the flipped-bit distribution and the settings used for that run.",
+    "入力や設定が変わりました。結果を表示するには再実行してください。":
+      "Inputs or settings changed. Run the operation again to display results.",
+    "処理できませんでした。上のエラーを確認してから再実行してください。":
+      "The operation failed. Check the error above, then try again.",
+    "解析中です。完了すると結果を表示します。":
+      "Analysis is running. Results will appear when it finishes.",
+    "実行時の条件と結果": "Settings and results for this run",
     "SPN（Substitution-Permutation Network）":
       "SPN (Substitution-Permutation Network)",
     "DES（1977）":

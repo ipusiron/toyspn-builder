@@ -52,8 +52,26 @@ body{
 .app-header{
   background:var(--card);
   border-bottom:1px solid var(--border);
-  padding:12px 16px;
+  padding:1rem;
   text-align:center;
+}
+
+.header-inner{
+  max-width:968px;
+  margin:0 auto;
+  display:grid;
+  grid-template-areas:"actions" "intro" "tabs";
+  gap:1rem;
+}
+.header-actions{ grid-area:actions; justify-self:end; }
+.header-intro{ grid-area:intro; min-width:0; }
+.header-intro .note{ margin-bottom:0; }
+
+@media (min-width:900px){
+  .header-inner{
+    grid-template-columns:5.5rem minmax(0,1fr) 5.5rem;
+    grid-template-areas:". intro actions" "tabs tabs tabs";
+  }
 }
 
 .app-header h1{
@@ -71,6 +89,7 @@ body{
 
 /* タブボタン */
 .tabs{
+  grid-area:tabs;
   display:flex;
   flex-wrap:wrap;
   gap:8px;
@@ -118,6 +137,18 @@ main{
 /* ========================================================
    グリッドレイアウト（S-Box / P層）
    ======================================================== */
+.current-settings{
+  margin:0 0 1rem;
+  padding:0.75rem;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--bg);
+  font-size:0.875rem;
+}
+.current-settings p{ margin:0 0 0.25rem; color:var(--muted); }
+.current-settings ul{ display:flex; flex-wrap:wrap; gap:0.25rem 1rem; list-style:none; margin:0; padding:0; }
+.empty-state{ color:var(--muted); padding:1rem; border:1px dashed var(--border); border-radius:8px; }
+
 .grid16{
   display:grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

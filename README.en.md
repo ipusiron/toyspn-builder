@@ -43,7 +43,7 @@ Try it directly in your browser.
 
 ### Basic usage
 
-1. Select “Encrypt / Decrypt” and press “Load sample.”
+1. Select “Encrypt / Decrypt” and press “Default sample.”
    This sets the default S and P, key `C0DE`, 8 rounds, and plaintext `1234`.
 2. Press “Encrypt.”
    The ciphertext is `FBC6`, with the intermediate states of all 8 rounds.
@@ -65,9 +65,17 @@ Blank input, invalid characters, and out-of-range integers produce errors.
 
 Changing settings clears results derived from those settings.
 Plaintext and ciphertext fields are retained, but they are not results computed with the new settings.
-“Load sample” resets S, P, key, rounds, and plaintext, and clears ciphertext and results. It keeps the trial count.
+“Default sample” resets S, P, key, rounds, and plaintext, and clears ciphertext and results. It keeps the trial count.
+The note below the button explains what will change, and a message confirms the loaded values.
 
-Use the button at the top to switch between Japanese and English.
+“Encrypt / Decrypt” and “Analyze” show the current round count, key, and S/P types.
+Each table is labeled Default, Identity, Custom, or Needs correction. Uncommitted input is labeled Composing input.
+This display follows the current inputs and is separate from the analysis section labeled “Settings and results for this run.”
+Before execution, an instruction explains what to do. After results are invalidated, it asks you to run again.
+Running and error states also have their own messages.
+
+Use the button at the top right of the header to switch between Japanese and English.
+On narrow screens, it sits above the title on the right, separate from the feature tabs.
 The initial language is selected from `?lang=ja|en`, the saved preference, then the browser locale, in that order.
 Inputs and results are not saved, and switching language does not rerun analysis.
 Switching still works when browser storage is unavailable.
@@ -225,7 +233,7 @@ Purpose: measure what happens when the round count changes.
 
 Procedure:
 
-1. Load the sample to restore the initial settings, then select 1 round.
+1. Load the default sample to restore the initial settings, then select 1 round.
 2. Run an avalanche test and note the conditions and result.
 3. Repeat with 4, 8, and 16 rounds.
 4. Compare distributions as well as means.

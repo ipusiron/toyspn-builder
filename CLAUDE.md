@@ -74,6 +74,10 @@ State scoped inside the ui.js IIFE:
 
 Changes update validation and invalidate dependent results. Analysis snapshots S, P, key, rounds, and trials. A generation counter cancels queued stale work. Catch errors inside the delayed callback. Keep derived UI consistent for input, reset, identity, randomization, sample, IME, and language actions.
 
+Current-setting summaries read the controls without modifying them or running the cipher. Keep them separate from recorded analysis settings. Classify S/P as default, identity, custom, or invalid after bijection checks. Show composing input during IME conversion. Empty-state guidance distinguishes initial, stale, running, error, and complete states. The default sample resets S/P, key, rounds, and plaintext, clears ciphertext/results, keeps trials, and restores initial guidance.
+
+The language button belongs to header actions at the right, separate from centered title content and tabs. On narrow screens, actions occupy their own row above the title. Verify spacing and no overlap in both languages.
+
 ## Key Implementation Details
 
 **16-bit constraints:**

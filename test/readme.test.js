@@ -151,3 +151,15 @@ test('documented numerical examples agree with the cipher and measurement core',
     assert.match(doc,/S = \[C,5,6,B,9,0,A,D,3,E,F,8,4,7,1,2\]/);
   }
 });
+
+test('both READMEs explain the sample scope, current settings and empty states',()=>{
+  for(const phrase of ['標準サンプル','右上','要修正','入力中','実行時の条件と結果','再実行','試行回数は保持']){
+    assert.ok(ja.includes(phrase),phrase);
+  }
+  for(const phrase of ['Default sample','top right','Needs correction','Composing input',
+    'Settings and results for this run','run again','keeps the trial count']){
+    assert.ok(en.includes(phrase),phrase);
+  }
+  assert.doesNotMatch(ja,/「サンプル」/);
+  assert.doesNotMatch(en,/Load sample/);
+});

@@ -514,6 +514,14 @@
     "すべて開く": "Expand all",
     "すべて閉じる": "Collapse all",
     "入力 {0} → 出力 {1}": "Input {0} → Output {1}",
+    "16ビット表示を追加": "Show 16-bit values too",
+    "値は16進数です。2進数は4ビット区切りで、左端がビット15、右端がビット0です。":
+      "Values are hexadecimal. Binary values are grouped in fours, from bit 15 on the left to bit 0 on the right.",
+    "鍵XORの計算": "Key XOR calculation",
+    "XOR前": "Before XOR",
+    "ラウンド鍵 {0}": "Round key {0}",
+    "XOR後": "After XOR",
+    "復号では最後のラウンド鍵から逆順に使います。": "Decryption uses the round keys from last to first.",
     "ラウンド {0} (逆順)":
       "Round {0} (reverse order)",
     "S-Box後":

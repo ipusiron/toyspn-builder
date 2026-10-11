@@ -71,3 +71,12 @@ test('round disclosure controls use native details with a visible input/output s
   assert.match(ui,/入力 \{0\} → 出力 \{1\}/);
   assert.doesNotMatch(css,/max-height:420px/);
 });
+
+test('bit display is optional and XOR operands use the executed round key',()=>{
+  assert.match(html,/id="steps-bits" type="checkbox"[^>]*aria-describedby="bits-note"/);
+  assert.match(html,/左端がビット15、右端がビット0/);
+  assert.match(ui,/padStart\(16, '0'\)/);
+  assert.match(ui,/roundKeys\[s.round - 1\]/);
+  assert.match(ui,/decrypt \? s.before : s.afterP/);
+  assert.match(ui,/renderSteps\(steps, rks, true\)/);
+});

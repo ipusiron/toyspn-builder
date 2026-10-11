@@ -78,6 +78,8 @@ Current-setting summaries read the controls without modifying them or running th
 
 The language button belongs to header actions at the right, separate from centered title content and tabs. On narrow screens, actions occupy their own row above the title. Verify spacing and no overlap in both languages.
 
+Round traces use native details/summary with the first processed round open and all input/output summaries visible. Shared renderSteps receives the exact round-key array used for that operation. Key XOR uses afterP for encryption and before for decryption; afterK is the result. Index keys by round - 1, including reverse-order decryption. Optional binary text is zero-padded to 16 bits, grouped in fours, bit 15 on the left. Display and language controls must not recompute, change values, or discard disclosure state. Input invalidation removes traces and hides their controls. Binary-display preference lasts only for the page lifetime.
+
 ## Key Implementation Details
 
 **16-bit constraints:**

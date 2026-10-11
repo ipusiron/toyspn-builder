@@ -163,3 +163,17 @@ test('both READMEs explain the sample scope, current settings and empty states',
   assert.doesNotMatch(ja,/「サンプル」/);
   assert.doesNotMatch(en,/Load sample/);
 });
+
+test('round display examples in both READMEs match the executed trace and key',()=>{
+  const keys=t.deriveRoundKeys(0xC0DE,8),steps=[];
+  t.encryptBlock(0x1234,t.DEFAULT_S,t.DEFAULT_P,keys,steps);
+  const s=steps[0];
+  const equation=s.afterP+' ⊕ '+t.numToHex16(keys[0])+' = '+s.afterK;
+  const bits=(0x1234).toString(2).padStart(16,'0').match(/.{4}/g).join(' ');
+  for(const doc of [ja,en]){
+    assert.ok(doc.includes(equation));
+    assert.ok(doc.includes(bits));
+  }
+  for(const phrase of ['すべて開く','すべて閉じる','ビット15','ビット0','再計算せず']) assert.ok(ja.includes(phrase));
+  for(const phrase of ['Expand all','Collapse all','Bit 15','bit 0','do not recompute']) assert.ok(en.includes(phrase));
+});

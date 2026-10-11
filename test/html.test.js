@@ -50,3 +50,15 @@ test('language control is separate from centered header content and tabs',()=>{
   assert.match(css,/grid-template-areas:"\. intro actions" "tabs tabs tabs"/);
   assert.match(css,/\.header-inner\{[^}]*gap:1rem/);
 });
+
+test('empty-state guidance, current settings and sample effects are explicit',()=>{
+  for(const id of ['steps-empty','analysis-empty','sample-note']) assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(html,/<div id="analysis-output" hidden>/);
+  assert.match(html,/id="btn-sample"[^>]*aria-describedby="sample-note">標準サンプル/);
+  for(const key of ['rounds','key','sbox','player']){
+    assert.equal((html.match(new RegExp('data-setting="'+key+'"','g'))||[]).length,2);
+  }
+  assert.match(ui,/renderCurrentSettings\(\)/);
+  assert.match(ui,/showAnalysisState\('complete'\)/);
+  assert.match(ui,/showCryptoState\('complete'\)/);
+});

@@ -122,6 +122,15 @@
     <section id="crypto" class="panel">
       <div class="card">
         <h2>暗号化 / 復号</h2>
+        <div class="current-settings">
+          <p>現在の設定（設計タブで変更）</p>
+          <ul>
+            <li><span>ラウンド数：</span><span data-setting="rounds"></span></li>
+            <li><span>鍵：</span><span data-setting="key"></span></li>
+            <li><span>S-Box：</span><span data-setting="sbox"></span></li>
+            <li><span>P層：</span><span data-setting="player"></span></li>
+          </ul>
+        </div>
         <div class="row">
           <label>平文 (16進数 16-bit)
             <input id="pt" type="text" value="1234" maxlength="4" placeholder="例: 1234" />
@@ -133,13 +142,15 @@
         <div class="row">
           <button id="btn-encrypt" class="btn primary">暗号化</button>
           <button id="btn-decrypt" class="btn">復号</button>
-          <button id="btn-sample" class="btn">サンプル</button>
+          <button id="btn-sample" class="btn" aria-describedby="sample-note">標準サンプル</button>
           <span id="crypto-status" class="status"></span>
         </div>
+        <p id="sample-note" class="note">標準サンプルはS/P・鍵・ラウンド数も標準設定に戻します。試行回数は変えません。</p>
       </div>
 
       <div class="card">
         <h3>ステップ詳細</h3>
+        <p id="steps-empty" class="empty-state" role="status">暗号化または復号を実行すると、各ラウンドの計算過程を表示します。</p>
         <div id="steps" class="steps"></div>
       </div>
     </section>
@@ -148,6 +159,15 @@
     <section id="analysis" class="panel">
       <div class="card">
         <h2>なだれ効果テスト（Avalanche Effect）<button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">入力の1ビットを変えたとき、出力が平均して何ビット変化するかを測定します。<br>各出力ビットが確率1/2で反転するモデルの平均は8ビットです。安全性の判定には使えません。<br>※アバランシェ効果とも呼ばれます。</span></button></h2>
+        <div class="current-settings">
+          <p>現在の設定（設計タブで変更）</p>
+          <ul>
+            <li><span>ラウンド数：</span><span data-setting="rounds"></span></li>
+            <li><span>鍵：</span><span data-setting="key"></span></li>
+            <li><span>S-Box：</span><span data-setting="sbox"></span></li>
+            <li><span>P層：</span><span data-setting="player"></span></li>
+          </ul>
+        </div>
         <div class="row">
           <label>試行回数
             <input id="trials" type="number" min="10" max="2000" value="200" placeholder="200" />
@@ -155,9 +175,12 @@
           <button id="btn-avalanche" class="btn primary">実行</button>
           <span id="avalanche-status" class="status"></span>
         </div>
+        <p id="analysis-empty" class="empty-state" role="status">実行すると、反転ビット数の分布と実行時の条件を表示します。</p>
+        <div id="analysis-output" hidden>
         <div class="row">
           <canvas id="chart" width="680" height="260" role="img" aria-label="反転ビット数のヒストグラム。正確な数値は下の表に表示します。"></canvas>
         </div>
+        <p class="note">実行時の条件と結果</p>
         <div class="row">
           <pre id="avalanche-summary" class="mono"></pre>
         </div>
@@ -172,6 +195,7 @@
             </thead>
             <tbody id="histogram-tbody"></tbody>
           </table>
+        </div>
         </div>
       </div>
 

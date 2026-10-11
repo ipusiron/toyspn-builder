@@ -297,7 +297,7 @@ input[type="text"]:focus, input[type="number"]:focus{
   font-family:var(--mono); background:#fafafa; padding:8px; border-radius:8px; border:1px solid var(--border);
   white-space:pre-wrap; overflow-wrap:anywhere; max-width:100%;
 }
-#chart { width:100%; max-width:680px; height:auto; }
+#chart { width:100%; max-width:680px; height:240px; }
 .bijection-note { color:var(--accent); }
 .learn-note { margin-top:16px; }
 

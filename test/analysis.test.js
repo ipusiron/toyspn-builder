@@ -43,3 +43,20 @@ test('random source fails explicitly without Web Crypto or when it throws', () =
     assert.throws(()=>context.ToySPN.random16(),{code:'randomUnavailable'});
   }
 });
+test('shuffle rejects biased tail values and leaves defaults intact on RNG failure',()=>{
+  const source=fs.readFileSync(require.resolve('../js/core.js'),'utf8');
+  let calls=0;
+  const context=vm.createContext({crypto:{getRandomValues(buffer){
+    // First draw uses 16 choices; second draw uses 15 and must reject 65535.
+    buffer[0]=calls++===1?65535:0;
+    return buffer;
+  }}});
+  vm.runInContext(source,context);
+  const result=context.ToySPN.shuffledTable();
+  assert.equal(calls,16);
+  assert.deepEqual(Array.from(result),[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,0]);
+  const defaults=Array.from(context.ToySPN.DEFAULT_S);
+  context.crypto.getRandomValues=()=>{throw Error('unavailable');};
+  assert.throws(()=>context.ToySPN.shuffledTable(),{code:'randomUnavailable'});
+  assert.deepEqual(Array.from(context.ToySPN.DEFAULT_S),defaults);
+});

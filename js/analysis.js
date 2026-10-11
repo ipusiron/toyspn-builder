@@ -52,7 +52,7 @@
    * アバランシェ効果（なだれ効果）テストを実行
    *
    * 平文の1ビットだけを反転させた場合、暗号文が何ビット変化するかを測定。
-   * 理想的なブロック暗号では、平均して50%（8/16ビット）が変化する。
+   * 各出力ビットが確率1/2で反転するモデルの平均は8ビット。安全性は判定しない。
    *
    * アルゴリズム:
    * 1. ランダムな平文を生成
@@ -125,7 +125,14 @@
    */
   const drawHistogram = (canvas, hist) => {
     const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
+    const W = Math.max(180, canvas.getBoundingClientRect().width), H = 240;
+    const scale = global.devicePixelRatio || 1;
+    canvas.width = Math.round(W * scale);
+    canvas.height = Math.round(H * scale);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.fillStyle = '#1f2937';
+    ctx.strokeStyle = '#1f2937';
+    ctx.font = '12px monospace';
 
     // キャンバスをクリア
     ctx.clearRect(0,0,W,H);
@@ -146,15 +153,14 @@
       const v = hist[i];
       // 高さを最大値に対する割合で計算
       const h = Math.floor((H - 50) * (v / maxV));
-      const x = 40 + i * barW + 4;
+      const x = 40 + i * barW + 1;
       const y = (H-30) - h;
 
       // バーを描画
-      ctx.fillRect(x, y, barW - 8, h);
+      ctx.fillRect(x, y, Math.max(1, barW - 2), h);
 
       // X軸ラベル（反転ビット数）
-      ctx.font = '10px monospace';
-      ctx.fillText(String(i), x+2, H-15);
+      if (W >= 420 || i % 2 === 0) ctx.fillText(String(i), x, H-12);
     }
   };
 

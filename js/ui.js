@@ -5,23 +5,26 @@
   // --- DOM helpers ---
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const M = ToySPNMessages;
+  let lastHistogram = null;
   let runVersion = 0;
   let pendingAnalysis = null;
   let composing = false;
 
   const clearAnalysis = () => {
+    lastHistogram = null;
     runVersion++;
     clearTimeout(pendingAnalysis);
     pendingAnalysis = null;
     $('#btn-avalanche').disabled = composing;
     $('#analysis').removeAttribute('aria-busy');
     $('#chart').getContext('2d').clearRect(0, 0, $('#chart').width, $('#chart').height);
-    $('#avalanche-summary').textContent = '';
+    M.clear($('#avalanche-summary'));
     $('#histogram-tbody').replaceChildren();
     $('#histogram-table').hidden = true;
     $('#expert-hint').hidden = true;
     $('#hint-content').replaceChildren();
-    $('#avalanche-status').textContent = '';
+    M.clear($('#avalanche-status'));
     $('#avalanche-status').className = 'status';
   };
   const invalidate = (scope = 'all') => {
@@ -29,10 +32,10 @@
     if (scope === 'analysis') return;
     $('#steps').replaceChildren();
     const status = $('#crypto-status');
-    if (status.textContent) status.textContent = ToySPNMessages.ja.changed;
+    if (status.textContent) M.text(status, ToySPNMessages.ja.changed);
     status.className = 'status';
     $('#validate-result').hidden = true;
-    $('#validate-status').replaceChildren();
+    M.clear($('#validate-status'));
   };
   const ensureCommitted = () => {
     if (composing) throw Object.assign(new Error('composing'), { code: 'composing' });
@@ -116,13 +119,13 @@
 
       const label = document.createElement('label');
       label.className = 'grid-label';
-      label.textContent = i.toString(16).toUpperCase();
+      M.text(label, i.toString(16).toUpperCase());
       label.htmlFor = 'sbox-' + i;
 
       const inp = document.createElement('input');
       inp.type = 'text';
       inp.id = 'sbox-' + i;
-      inp.setAttribute('aria-label', 'S-Box 入力' + i.toString(16).toUpperCase() + 'の出力');
+      inp.setAttribute('aria-label', M.t('S-Box 入力{0}の出力', i.toString(16).toUpperCase()));
       inp.autocomplete = 'off';
       inp.maxLength = 1;
       inp.value = S[i].toString(16).toUpperCase();
@@ -196,7 +199,7 @@
       inputText.setAttribute('x', x);
       inputText.setAttribute('y', inputY - 12);
       inputText.setAttribute('class', 'viz-text');
-      inputText.textContent = i.toString(16).toUpperCase();
+      M.text(inputText, i.toString(16).toUpperCase());
       inputDots.appendChild(inputText);
 
       // Output dot
@@ -211,7 +214,7 @@
       outputText.setAttribute('x', x);
       outputText.setAttribute('y', outputY + 18);
       outputText.setAttribute('class', 'viz-text');
-      outputText.textContent = i.toString(16).toUpperCase();
+      M.text(outputText, i.toString(16).toUpperCase());
       outputDots.appendChild(outputText);
     }
 
@@ -230,7 +233,7 @@
 
       // Add title for hover
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = `${i.toString(16).toUpperCase()} → ${S[i].toString(16).toUpperCase()}`;
+      M.text(title, `${i.toString(16).toUpperCase()} → ${S[i].toString(16).toUpperCase()}`);
       line.appendChild(title);
 
       arrows.appendChild(line);
@@ -241,7 +244,7 @@
     invalidate();
     S = readSBox();
     const ok = ToySPN.isBijection(S,16);
-    sStatus.textContent = ok ? '全単射 ✅' : '全単射ではありません ❌';
+    M.text(sStatus, ok ? '全単射 ✅' : '全単射ではありません ❌');
     sStatus.className = 'status ' + (ok ? 'ok' : 'bad');
     drawSBoxVisualization(S);
   };
@@ -257,7 +260,7 @@
     S = ToySPN.shuffledTable();
     makeSBoxInputs(S);
     onSBoxChange();
-    } catch (e) { sStatus.textContent = ToySPNMessages.error(e); }
+    } catch (e) { M.text(sStatus, ToySPNMessages.error(e)); }
   });
 
   $('#sbox-identity').addEventListener('click', ()=>{
@@ -277,13 +280,13 @@
 
       const label = document.createElement('label');
       label.className = 'grid-label';
-      label.textContent = 'b' + i;
+      M.text(label, 'b' + i);
       label.htmlFor = 'player-' + i;
 
       const inp = document.createElement('input');
       inp.type = 'number';
       inp.id = 'player-' + i;
-      inp.setAttribute('aria-label', '入力ビット' + i + 'の移動先');
+      inp.setAttribute('aria-label', M.t('入力ビット{0}の移動先', i));
       inp.min = 0; inp.max = 15;
       inp.value = P[i];
       inp.dataset.idx = String(i);
@@ -355,7 +358,7 @@
       inputText.setAttribute('x', x);
       inputText.setAttribute('y', inputY - 12);
       inputText.setAttribute('class', 'viz-text');
-      inputText.textContent = i;
+      M.text(inputText, i);
       inputDots.appendChild(inputText);
 
       // Output dot
@@ -370,7 +373,7 @@
       outputText.setAttribute('x', x);
       outputText.setAttribute('y', outputY + 18);
       outputText.setAttribute('class', 'viz-text');
-      outputText.textContent = i;
+      M.text(outputText, i);
       outputDots.appendChild(outputText);
     }
 
@@ -389,7 +392,7 @@
 
       // Add title for hover
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = `b${i} → b${P[i]}`;
+      M.text(title, `b${i} → b${P[i]}`);
       line.appendChild(title);
 
       arrows.appendChild(line);
@@ -400,7 +403,7 @@
     invalidate();
     P = readPLayer();
     const ok = ToySPN.isBijection(P,16);
-    pStatus.textContent = ok ? '全単射 ✅' : '全単射ではありません ❌';
+    M.text(pStatus, ok ? '全単射 ✅' : '全単射ではありません ❌');
     pStatus.className = 'status ' + (ok ? 'ok' : 'bad');
     drawPLayerVisualization(P);
   };
@@ -416,7 +419,7 @@
     P = ToySPN.shuffledTable();
     makePLayerInputs(P);
     onPLayerChange();
-    } catch (e) { pStatus.textContent = ToySPNMessages.error(e); }
+    } catch (e) { M.text(pStatus, ToySPNMessages.error(e)); }
   });
 
   $('#player-identity').addEventListener('click', ()=>{
@@ -463,7 +466,7 @@
       invalidate();
     } catch (e) {
       validateResult.hidden = false;
-      validateStatus.textContent = ToySPNMessages.error(e);
+      M.text(validateStatus, ToySPNMessages.error(e));
     }
   });
 
@@ -481,7 +484,7 @@
     const pClass = okP ? 'ok' : 'ng';
     const overall = okS && okP;
 
-    validateStatus.replaceChildren();
+    M.clear(validateStatus);
 
     const createDetailRow = (labelText, valueText, valueClass = '', isTotal = false) => {
       const row = document.createElement('div');
@@ -495,12 +498,12 @@
       const label = document.createElement('span');
       label.className = 'detail-label';
       if (isTotal) label.style.fontSize = '15px';
-      label.textContent = labelText;
+      M.text(label, labelText);
 
       const value = document.createElement('span');
       value.className = `detail-value ${valueClass}`;
       if (isTotal) value.style.fontSize = '15px';
-      value.textContent = valueText;
+      M.text(value, valueText);
 
       row.appendChild(label);
       row.appendChild(value);
@@ -517,7 +520,7 @@
     validateResult.hidden = false;
     } catch (e) {
       validateResult.hidden = false;
-      validateStatus.textContent = ToySPNMessages.error(e);
+      M.text(validateStatus, ToySPNMessages.error(e));
     }
   });
 
@@ -548,7 +551,7 @@
       div.className = 'step-round';
 
       const h4 = document.createElement('h4');
-      h4.textContent = `ラウンド ${s.round}`;
+      M.text(h4, 'ラウンド {0}', s.round);
       div.appendChild(h4);
 
       const createRow = (label, value, showArrow = false) => {
@@ -556,17 +559,17 @@
         row.className = 'step-row';
         const labelSpan = document.createElement('span');
         labelSpan.className = 'step-label';
-        labelSpan.textContent = label;
+        M.text(labelSpan, label);
         row.appendChild(labelSpan);
         if (showArrow) {
           const arrow = document.createElement('span');
           arrow.className = 'step-arrow';
-          arrow.textContent = '↓';
+          M.text(arrow, '↓');
           row.appendChild(arrow);
         }
         const valueSpan = document.createElement('span');
         valueSpan.className = 'step-value';
-        valueSpan.textContent = value;
+        M.text(valueSpan, value);
         row.appendChild(valueSpan);
         return row;
       };
@@ -581,7 +584,7 @@
     if (steps.length === 0) {
       const div = document.createElement('div');
       div.className = 'step-round';
-      div.textContent = '表示するステップがありません';
+      M.text(div, '表示するステップがありません');
       stepsEl.appendChild(div);
     }
   };
@@ -593,7 +596,7 @@
       div.className = 'step-round';
 
       const h4 = document.createElement('h4');
-      h4.textContent = `ラウンド ${s.round} (逆順)`;
+      M.text(h4, 'ラウンド {0} (逆順)', s.round);
       div.appendChild(h4);
 
       const createRow = (label, value, showArrow = false) => {
@@ -601,17 +604,17 @@
         row.className = 'step-row';
         const labelSpan = document.createElement('span');
         labelSpan.className = 'step-label';
-        labelSpan.textContent = label;
+        M.text(labelSpan, label);
         row.appendChild(labelSpan);
         if (showArrow) {
           const arrow = document.createElement('span');
           arrow.className = 'step-arrow';
-          arrow.textContent = '↓';
+          M.text(arrow, '↓');
           row.appendChild(arrow);
         }
         const valueSpan = document.createElement('span');
         valueSpan.className = 'step-value';
-        valueSpan.textContent = value;
+        M.text(valueSpan, value);
         row.appendChild(valueSpan);
         return row;
       };
@@ -626,7 +629,7 @@
     if (steps.length === 0) {
       const div = document.createElement('div');
       div.className = 'step-round';
-      div.textContent = '表示するステップがありません';
+      M.text(div, '表示するステップがありません');
       stepsEl.appendChild(div);
     }
   };
@@ -639,10 +642,10 @@
       const ct = ToySPN.encryptBlock(pt, S, P, rks, steps);
       ctEl.value = ToySPN.numToHex16(ct);
       renderEncryptSteps(steps);
-      cryptoStatus.textContent = '暗号化完了 ✅';
+      M.text(cryptoStatus, '暗号化完了 ✅');
       cryptoStatus.className = 'status ok';
     }catch(e){
-      cryptoStatus.textContent = ToySPNMessages.error(e);
+      M.text(cryptoStatus, ToySPNMessages.error(e));
       cryptoStatus.className = 'status bad';
     }
   });
@@ -657,10 +660,10 @@
       const pt = ToySPN.decryptBlock(ct, invS, invP, rks, steps);
       ptEl.value = ToySPN.numToHex16(pt);
       renderDecryptSteps(steps);
-      cryptoStatus.textContent = '復号完了 ✅';
+      M.text(cryptoStatus, '復号完了 ✅');
       cryptoStatus.className = 'status ok';
     }catch(e){
-      cryptoStatus.textContent = ToySPNMessages.error(e);
+      M.text(cryptoStatus, ToySPNMessages.error(e));
       cryptoStatus.className = 'status bad';
     }
   });
@@ -679,7 +682,7 @@
     ctEl.value = '';
     invalidate();
     stepsEl.replaceChildren();
-    cryptoStatus.textContent = 'サンプルを読み込みました';
+    M.text(cryptoStatus, 'サンプルを読み込みました');
     cryptoStatus.className = 'status';
   });
 
@@ -700,8 +703,8 @@
     return {
       verdict: ToySPNMessages.ja.measured,
       verdictClass: 'measured',
-      analysis: `7〜9ビットが反転した試行は${centerCount}/${trials}回（${centerPct.toFixed(1)}%）です。` +
-        ToySPNMessages.ja.measurementLimit,
+      analysis: '7〜9ビットが反転した試行は{0}/{1}回（{2}%）です。',
+      values: [centerCount, trials, centerPct.toFixed(1)],
       suggestions: ToySPNMessages.ja.measurementHints
     };
   };
@@ -715,15 +718,16 @@
       const version = runVersion;
       avBtn.disabled = true;
       $('#analysis').setAttribute('aria-busy', 'true');
-      avStatus.textContent = '実行中...';
+      M.text(avStatus, '実行中...');
       pendingAnalysis = setTimeout(()=>{
         if (version !== runVersion) return;
         try {
         const { hist, avg } = ToySPNAnalysis.avalancheTrials(t, savedS, savedP, rks);
+        lastHistogram = hist.slice();
         ToySPNAnalysis.drawHistogram(canvas, hist);
-        summary.textContent = `試行回数=${t}\n平均反転ビット数=${avg.toFixed(3)} / 16\n` +
-          `ラウンド数=${R}、鍵=${ToySPN.numToHex16(mk)}\n` +
-          `S=${savedS.map(n => n.toString(16).toUpperCase()).join(' ')}\nP=${savedP.join(' ')}`;
+        M.text(summary, '試行回数={0}\n平均反転ビット数={1} / 16\nラウンド数={2}、鍵={3}\nS={4}\nP={5}',
+          t, avg.toFixed(3), R, ToySPN.numToHex16(mk),
+          savedS.map(n => n.toString(16).toUpperCase()).join(' '), savedP.join(' '));
 
         // Populate histogram data table
         const tbody = $('#histogram-tbody');
@@ -735,11 +739,11 @@
           const tr = document.createElement('tr');
 
           const td1 = document.createElement('td');
-          td1.textContent = String(i);
+          M.text(td1, String(i));
           const td2 = document.createElement('td');
-          td2.textContent = String(hist[i]);
+          M.text(td2, String(hist[i]));
           const td3 = document.createElement('td');
-          td3.textContent = `${pct}%`;
+          M.text(td3, `${pct}%`);
 
           tr.appendChild(td1);
           tr.appendChild(td2);
@@ -749,7 +753,7 @@
         $('#histogram-table').hidden = !hasData;
 
         // Show expert hint
-        const { verdict, verdictClass, analysis, suggestions } = analyzeAvalancheResult(avg, hist, t);
+        const { verdict, verdictClass, analysis, values, suggestions } = analyzeAvalancheResult(avg, hist, t);
         const expertHint = $('#expert-hint');
         const hintContent = $('#hint-content');
 
@@ -758,33 +762,38 @@
         const section1 = document.createElement('div');
         section1.className = 'hint-section';
         const h4_1 = document.createElement('h4');
-        h4_1.textContent = '測定値';
+        M.text(h4_1, '測定値');
         const p1 = document.createElement('p');
         const span1 = document.createElement('span');
         span1.className = `hint-verdict ${verdictClass}`;
-        span1.textContent = verdict;
+        M.text(span1, verdict);
         p1.appendChild(span1);
-        p1.appendChild(document.createTextNode(` 平均反転ビット数: ${avg.toFixed(3)} / 16.0 ビット`));
+        const average = document.createElement('span');
+        M.text(average, ' 平均反転ビット数: {0} / 16.0 ビット', avg.toFixed(3));
+        p1.appendChild(average);
         section1.appendChild(h4_1);
         section1.appendChild(p1);
 
         const section2 = document.createElement('div');
         section2.className = 'hint-section';
         const h4_2 = document.createElement('h4');
-        h4_2.textContent = '分布と測定の限界';
+        M.text(h4_2, '分布と測定の限界');
         const p2 = document.createElement('p');
-        p2.textContent = analysis;
+        M.text(p2, analysis, ...values);
+        const limit = document.createElement('p');
+        M.text(limit, M.ja.measurementLimit);
         section2.appendChild(h4_2);
         section2.appendChild(p2);
+        section2.appendChild(limit);
 
         const section3 = document.createElement('div');
         section3.className = 'hint-section';
         const h4_3 = document.createElement('h4');
-        h4_3.textContent = '比較するときの注意';
+        M.text(h4_3, '比較するときの注意');
         const ul = document.createElement('ul');
         suggestions.forEach(s => {
           const li = document.createElement('li');
-          li.textContent = s;
+          M.text(li, s);
           ul.appendChild(li);
         });
         section3.appendChild(h4_3);
@@ -795,11 +804,11 @@
         hintContent.appendChild(section3);
         expertHint.hidden = false;
 
-        avStatus.textContent = '完了 ✅';
+        M.text(avStatus, '完了 ✅');
         avStatus.className = 'status ok';
         } catch (e) {
           clearAnalysis();
-          avStatus.textContent = ToySPNMessages.error(e);
+          M.text(avStatus, ToySPNMessages.error(e));
           avStatus.className = 'status bad';
         } finally {
           pendingAnalysis = null;
@@ -808,10 +817,16 @@
         }
       }, 10);
     }catch(e){
-      avStatus.textContent = ToySPNMessages.error(e);
+      M.text(avStatus, ToySPNMessages.error(e));
       avStatus.className = 'status bad';
     }
   });
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => {
+      if (lastHistogram && !$('#analysis').hidden) ToySPNAnalysis.drawHistogram(canvas, lastHistogram);
+    }).observe(canvas);
+  }
 
   // --- Accordion for Learn section ---
   $$('.accordion-header').forEach((btn, i) => {
@@ -840,4 +855,7 @@
     });
   });
 
+  M.registerStatic(document.documentElement);
+  $('#language-toggle').addEventListener('click', () => M.saveLanguage(M.language === 'ja' ? 'en' : 'ja'));
+  M.setLanguage(M.initialLanguage());
 })();

@@ -18,6 +18,7 @@
     <h1>ToySPN Builder - SPN体験ミニツール</h1>
     <p class="tagline">S-Box・P層・鍵加算で学ぶ現代ブロック暗号の仕組み</p>
     <p class="note">16ビットの教育用暗号です。なだれ効果は安全性の評価ではありません。秘密情報の保護には使えません。</p>
+    <button id="language-toggle" class="btn" type="button" lang="en">English</button>
     <nav class="tabs">
       <button class="tab active" data-tab="designer">設計</button>
       <button class="tab" data-tab="crypto">暗号化/復号</button>
@@ -31,7 +32,7 @@
     <section id="designer" class="panel active">
       <div class="card">
         <h2>S-Box（4bit，全単射）<button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">4ビット入力を4ビットの値に置換する表です。<br>0〜Fを重複なく並べてください。全単射でも非線形とは限りません。</span></button></h2>
-        <p class="help">0x0〜0xF の置換を入力（重複不可）。変更すると逆S-Boxは自動生成されます。<br>
+        <p class="help">0x0〜0xF の置換を入力（重複不可）。復号時に逆S-Boxを生成します。<br>
         <span class="bijection-note">💡 全単射 = すべての入力が異なる出力に1対1対応（重複なし・欠落なし）</span></p>
         <div id="sbox-grid" class="grid16"></div>
         <div class="row">
@@ -58,7 +59,7 @@
       </div>
 
       <div class="card">
-        <h2>P層（ビット置換，16bit）<button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">16ビットのビット位置を入れ替える線形変換層です。<br>各ビットiをP[i]番目の位置に移動させます。<br>S-Boxで生じた変化をブロック全体に拡散させる役割があります。</span></button></h2>
+        <h2>P層（ビット置換，16bit）<button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">16ビットのビット位置を入れ替える線形変換層です。<br>各ビットiをP[i]番目の位置に移動させます。<br>P層自体は反転ビット数を変えません。次のラウンドのS-Boxへの伝わり方を変えます。</span></button></h2>
         <p class="help">ビット i（0..15）を P[i] 番目へ。全単射である必要があります。</p>
         <div id="player-grid" class="grid16"></div>
         <div class="row">
@@ -95,7 +96,7 @@
         </div>
         <div class="config-group-inline">
           <label for="master-key">マスター鍵 (16進数 16-bit)</label>
-          <button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">暗号化・復号に使う秘密鍵です。<br>16進数4桁（16ビット）で指定します。<br>この鍵から各ラウンドで使う鍵を自動生成します。</span></button>
+          <button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">暗号化・復号に使う秘密鍵です。<br>16進数1〜4桁で指定します（先頭の0は省略可能）。<br>この鍵から各ラウンドで使う鍵を自動生成します。</span></button>
           <input id="master-key" type="text" value="C0DE" maxlength="4" placeholder="例: C0DE" class="input-medium" />
           <button id="key-random" class="btn">ランダム生成</button>
         </div>
@@ -140,7 +141,7 @@
     <!-- Analysis -->
     <section id="analysis" class="panel">
       <div class="card">
-        <h2>なだれ効果テスト（Avalanche Effect）<button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">入力の1ビットを変えたとき、出力が平均して何ビット変化するかを測定します。<br>理想的には約50%（8ビット）が変化するべきで、これが暗号の拡散性能を示します。<br>※アバランシェ効果とも呼ばれます。</span></button></h2>
+        <h2>なだれ効果テスト（Avalanche Effect）<button class="help-icon" type="button" aria-label="補足説明">?<span class="tooltip">入力の1ビットを変えたとき、出力が平均して何ビット変化するかを測定します。<br>各出力ビットが確率1/2で反転するモデルの平均は8ビットです。安全性の判定には使えません。<br>※アバランシェ効果とも呼ばれます。</span></button></h2>
         <div class="row">
           <label>試行回数
             <input id="trials" type="number" min="10" max="2000" value="200" placeholder="200" />
@@ -189,7 +190,7 @@
             <ul>
               <li><b>Substitution（置換）</b>: S-Boxによる非線形変換で、線形解読を困難にする</li>
               <li><b>Permutation（転置）</b>: P層によるビット拡散で、局所的な変化を全体に広げる</li>
-              <li><b>鍵加算</b>: ラウンド鍵とのXORで秘密性を付与</li>
+              <li><b>鍵加算</b>: ラウンド鍵をXORして鍵に依存する変換にする</li>
             </ul>
             <p>これらを繰り返し、変化がどう伝わるかを観察します。AESもSPN型ですが、本ツールとは構成や安全性が異なります。</p>
           </div>

@@ -5,6 +5,46 @@
   // --- DOM helpers ---
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
+  let runVersion = 0;
+  let pendingAnalysis = null;
+  let composing = false;
+
+  const clearAnalysis = () => {
+    runVersion++;
+    clearTimeout(pendingAnalysis);
+    pendingAnalysis = null;
+    $('#btn-avalanche').disabled = composing;
+    $('#analysis').removeAttribute('aria-busy');
+    $('#chart').getContext('2d').clearRect(0, 0, $('#chart').width, $('#chart').height);
+    $('#avalanche-summary').textContent = '';
+    $('#histogram-tbody').replaceChildren();
+    $('#histogram-table').style.display = 'none';
+    $('#expert-hint').style.display = 'none';
+    $('#hint-content').replaceChildren();
+    $('#avalanche-status').textContent = '';
+    $('#avalanche-status').className = 'status';
+  };
+  const invalidate = (scope = 'all') => {
+    if (scope !== 'crypto') clearAnalysis();
+    if (scope === 'analysis') return;
+    $('#steps').replaceChildren();
+    const status = $('#crypto-status');
+    if (status.textContent) status.textContent = ToySPNMessages.ja.changed;
+    status.className = 'status';
+    $('#validate-result').style.display = 'none';
+    $('#validate-status').replaceChildren();
+  };
+  const ensureCommitted = () => {
+    if (composing) throw Object.assign(new Error('composing'), { code: 'composing' });
+  };
+  document.addEventListener('compositionstart', () => {
+    composing = true;
+    invalidate();
+  });
+  document.addEventListener('compositionend', () => {
+    composing = false;
+    invalidate();
+  });
 
   // Tabs
   $$('.tab').forEach(btn=>{
@@ -141,6 +181,7 @@
   };
 
   const onSBoxChange = () => {
+    invalidate();
     S = readSBox();
     const ok = ToySPN.isBijection(S,16);
     sStatus.textContent = ok ? '全単射 ✅' : '全単射ではありません ❌';
@@ -296,6 +337,7 @@
   };
 
   const onPLayerChange = () => {
+    invalidate();
     P = readPLayer();
     const ok = ToySPN.isBijection(P,16);
     pStatus.textContent = ok ? '全単射 ✅' : '全単射ではありません ❌';
@@ -348,15 +390,19 @@
 
   roundsMinBtn.addEventListener('click', ()=>{
     roundsEl.value = 1;
+    invalidate();
   });
 
   roundsMaxBtn.addEventListener('click', ()=>{
     roundsEl.value = 16;
+    invalidate();
   });
 
   keyRandomBtn.addEventListener('click', ()=>{
     try {
+      ensureCommitted();
       mkeyEl.value = ToySPN.numToHex16(ToySPN.random16());
+      invalidate();
     } catch (e) {
       validateResult.style.display = 'block';
       validateStatus.textContent = ToySPNMessages.error(e);
@@ -365,6 +411,7 @@
 
   validateBtn.addEventListener('click', ()=>{
     try {
+    ensureCommitted();
     const okS = ToySPN.isBijection(S,16);
     const okP = ToySPN.isBijection(P,16);
     const mk = ToySPN.hex16ToNum(mkeyEl.value);
@@ -426,6 +473,7 @@
   };
 
   const collectParams = () => {
+    ensureCommitted();
     const okS = ToySPN.isBijection(S,16);
     const okP = ToySPN.isBijection(P,16);
     if (!okS || !okP) throw Object.assign(new Error('invalidTables'), { code: 'invalidTables' });
@@ -560,9 +608,18 @@
   });
 
   $('#btn-sample').addEventListener('click', ()=>{
+    if (composing) return;
+    S = ToySPN.DEFAULT_S.slice();
+    P = ToySPN.DEFAULT_P.slice();
+    makeSBoxInputs(S);
+    makePLayerInputs(P);
+    onSBoxChange();
+    onPLayerChange();
     ptEl.value = '1234';
     mkeyEl.value = 'C0DE';
     roundsEl.value = 8;
+    ctEl.value = '';
+    invalidate();
     stepsEl.innerHTML = '';
     cryptoStatus.textContent = 'サンプルを読み込みました';
     cryptoStatus.className = 'status';
@@ -574,6 +631,9 @@
   const avStatus = $('#avalanche-status');
   const canvas = $('#chart');
   const summary = $('#avalanche-summary');
+  [roundsEl, mkeyEl].forEach(input => input.addEventListener('input', () => invalidate()));
+  [ptEl, ctEl].forEach(input => input.addEventListener('input', () => invalidate('crypto')));
+  trialsEl.addEventListener('input', () => invalidate('analysis'));
 
   const analyzeAvalancheResult = (avg, hist, trials) => {
     const deviation = Math.abs(avg - 8.0);
@@ -627,13 +687,22 @@
 
   avBtn.addEventListener('click', ()=>{
     try{
-      const { rks } = collectParams();
+      const { rks, R, mk } = collectParams();
       const t = readInteger(trialsEl, 10, 2000, 'invalidTrials');
+      const savedS = S.slice(), savedP = P.slice();
+      clearAnalysis();
+      const version = runVersion;
+      avBtn.disabled = true;
+      $('#analysis').setAttribute('aria-busy', 'true');
       avStatus.textContent = '実行中...';
-      setTimeout(()=>{
-        const { hist, avg } = ToySPNAnalysis.avalancheTrials(t, S, P, rks);
+      pendingAnalysis = setTimeout(()=>{
+        if (version !== runVersion) return;
+        try {
+        const { hist, avg } = ToySPNAnalysis.avalancheTrials(t, savedS, savedP, rks);
         ToySPNAnalysis.drawHistogram(canvas, hist);
-        summary.textContent = `試行回数=${t}\n平均反転ビット数=${avg.toFixed(3)} (理想値 ~ 8.0)`;
+        summary.textContent = `試行回数=${t}\n平均反転ビット数=${avg.toFixed(3)} / 16\n` +
+          `ラウンド数=${R}、鍵=${ToySPN.numToHex16(mk)}\n` +
+          `S=${savedS.map(n => n.toString(16).toUpperCase()).join(' ')}\nP=${savedP.join(' ')}`;
 
         // Populate histogram data table
         const tbody = $('#histogram-tbody');
@@ -707,6 +776,15 @@
 
         avStatus.textContent = '完了 ✅';
         avStatus.className = 'status ok';
+        } catch (e) {
+          clearAnalysis();
+          avStatus.textContent = ToySPNMessages.error(e);
+          avStatus.className = 'status bad';
+        } finally {
+          pendingAnalysis = null;
+          avBtn.disabled = false;
+          $('#analysis').removeAttribute('aria-busy');
+        }
       }, 10);
     }catch(e){
       avStatus.textContent = ToySPNMessages.error(e);

@@ -10,6 +10,7 @@
 
 (function(global){
   'use strict';
+  const ToySPN = global.ToySPN || (typeof require === 'function' ? require('./core.js') : null);
 
   // =========================================================
   // ヘルパー関数
@@ -17,20 +18,11 @@
 
   /**
    * 暗号学的に安全な16ビット乱数を生成
-   * crypto.getRandomValues が使える場合はそれを使用し、
-   * 使えない場合は Math.random() にフォールバック
+   * Web Cryptoが使えない場合は失敗として呼び出し側へ通知する
    *
    * @returns {number} 0〜0xFFFFのランダムな16ビット整数
    */
-  const rand16 = () => {
-    if (window.crypto && crypto.getRandomValues){
-      const buf = new Uint16Array(1);
-      crypto.getRandomValues(buf);
-      return buf[0];
-    }
-    // フォールバック（暗号学的に安全でない）
-    return (Math.random()*0x10000) & 0xFFFF;
-  };
+  const rand16 = () => ToySPN.random16();
 
   /**
    * ハミング距離（反転ビット数）を計算
@@ -77,10 +69,17 @@
    *   - hist: 反転ビット数の分布（インデックス0〜16）
    *   - avg: 平均反転ビット数
    */
-  const avalancheTrials = (trials, S, P, roundKeys) => {
-    // 逆写像は使わないが、一貫性のため計算
-    const invS = ToySPN.invertSBox(S);
-    const invP = ToySPN.invertPermutation(P);
+  const avalancheTrials = (trials, S, P, roundKeys, random = rand16) => {
+    if (!Number.isInteger(trials) || trials < 10 || trials > 2000) {
+      throw Object.assign(new Error('invalidTrials'), { code: 'invalidTrials' });
+    }
+    if (!ToySPN.isBijection(S,16) || !ToySPN.isBijection(P,16)) {
+      throw Object.assign(new Error('invalidTables'), { code: 'invalidTables' });
+    }
+    if (!Array.isArray(roundKeys) || roundKeys.length < 1 || roundKeys.length > 16 ||
+        !roundKeys.every(k => Number.isInteger(k) && k >= 0 && k <= 0xFFFF)) {
+      throw Object.assign(new Error('invalidRounds'), { code: 'invalidRounds' });
+    }
 
     // ヒストグラム: hist[i] = 反転ビット数がiだった回数
     const hist = new Array(17).fill(0);
@@ -88,9 +87,13 @@
 
     for (let i = 0; i < trials; i++){
       // ランダムな平文
-      const pt = rand16();
+      const pt = random();
       // ランダムに1ビット選択
-      const bit = 1 << (rand16() % 16);
+      const position = random();
+      if (![pt, position].every(n => Number.isInteger(n) && n >= 0 && n <= 0xFFFF)) {
+        throw Object.assign(new Error('randomUnavailable'), { code: 'randomUnavailable' });
+      }
+      const bit = 1 << (position % 16);
       // 1ビットだけ反転した平文
       const pt2 = pt ^ bit;
 
@@ -167,5 +170,6 @@
     avalancheTrials,   // アバランシェテスト実行
     drawHistogram      // ヒストグラム描画
   };
+  if (typeof module !== 'undefined' && module.exports) module.exports = global.ToySPNAnalysis;
 
-})(window);
+})(typeof window !== 'undefined' ? window : globalThis);
